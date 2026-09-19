@@ -1,0 +1,5 @@
+{
+  "model": "DecisionTreeRegressor",
+  "RMSE": 0.8582316994047801,
+  "R2": -0.02827258178907832
+}
