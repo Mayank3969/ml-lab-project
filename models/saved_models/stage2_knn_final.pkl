@@ -1,0 +1,1 @@
+# stage2_knn_final.pkl: Serialized model artifact for the Stage 2 final K-Nearest Neighbors (KNN) classifier.
