@@ -1,0 +1,1 @@
+# stage2_logreg_final.pkl: Serialized model artifact for the Stage 2 final Logistic Regression classifier.

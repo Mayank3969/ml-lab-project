@@ -1,0 +1,1 @@
+# merged_train.csv: Joined 3 raw tables (collision, vehicle, casualty), leakage cols dropped, encoded, ~64k rows.

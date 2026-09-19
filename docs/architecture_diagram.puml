@@ -1,0 +1,42 @@
+@startuml architecture_diagram
+' architecture_diagram.puml: PlantUML source diagram representing the multi-stage collision severity pipeline architecture.
+
+skinparam monochrome false
+skinparam roundcorner 8
+
+package "Data Ingestion & Preprocessing" {
+    [collision.csv] --> [preprocessing.py]
+    [vehicle.csv] --> [preprocessing.py]
+    [casualty.csv] --> [preprocessing.py]
+    [preprocessing.py] --> [merged_train.csv]
+    [preprocessing.py] --> [merged_test.csv]
+}
+
+package "Stage 1: Regression (Risk Scoring)" {
+    [merged_train.csv] --> [train_linear_regression.py]
+    [merged_train.csv] --> [train_decision_tree_regressor.py]
+    [train_linear_regression.py] --> [compare_regressors.py]
+    [train_decision_tree_regressor.py] --> [compare_regressors.py]
+    [compare_regressors.py] --> [stage1_best_regressor.pkl]
+}
+
+package "Stage 2: Base Classifiers & Stacking" {
+    [oof_generator.py] --> [meta_train.csv] : Phase A (5-Fold OOF)
+    [final_models_trainer.py] --> [meta_test.csv] : Phase B (Test Predictions)
+    [final_models_trainer.py] --> [stage2_logreg_final.pkl]
+    [final_models_trainer.py] --> [stage2_knn_final.pkl]
+    [final_models_trainer.py] --> [stage2_dt_final.pkl]
+    [final_models_trainer.py] --> [stage2_perceptron_final.pkl]
+}
+
+package "Stage 3: Meta-Classifier" {
+    [meta_train.csv] --> [train_meta_classifier.py]
+    [meta_test.csv] --> [train_meta_classifier.py]
+    [train_meta_classifier.py] --> [stage3_meta_classifier.pkl]
+}
+
+package "Evaluation" {
+    [baseline_vs_pipeline.py] --> [results/]
+}
+
+@enduml
