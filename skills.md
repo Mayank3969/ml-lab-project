@@ -255,9 +255,9 @@ AI-Learning-Toolkit/
 ## Progress tracker
 - [x] Stage 1 — EDA, merge, feature selection (merged_train.csv + merged_test.csv)
 - [x] Stage 2 — Regression risk_score (LR R²=0.023, risk_score in both CSVs)
-- [ ] Stage 3A — Base classifiers Phase A (oof_generator.py → meta_train.csv)
-- [ ] Stage 3A — Base classifiers Phase B (final_models_trainer.py → meta_test.csv + 3 .pkl)
-- [ ] Stage 4 — Meta-classifier (train_meta_classifier.py → final prediction)
-- [ ] Stage 5 — Evaluation (baseline_vs_pipeline.py → metrics + confusion matrix)
-- [ ] Stage 6 — Streamlit app (inference pipeline matching training order)
+- [x] Stage 3A — Base classifiers Phase A (oof_generator.py → meta_train.csv)
+- [x] Stage 3A — Base classifiers Phase B (final_models_trainer.py → meta_test.csv + 3 .pkl)
+- [x] Stage 4 — Meta-classifier (train_meta_classifier.py → final prediction)
+- [x] Stage 5 — Evaluation (baseline_vs_pipeline.py → metrics + confusion matrix)
+- [x] Stage 6 — Streamlit app (inference pipeline matching training order)
 

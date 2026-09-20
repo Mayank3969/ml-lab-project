@@ -1,1 +1,0 @@
-# stage2_perceptron_final.pkl: Serialized model artifact for the Stage 2 final Perceptron classifier.

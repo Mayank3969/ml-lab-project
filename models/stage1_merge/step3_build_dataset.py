@@ -166,9 +166,9 @@ print(f"\n  Removed {len(removed)} irrelevant columns")
 # [6] WHAT'S LEFT
 # ══════════════════════════════════════════════════════════════
 print("\n[6] FINAL FEATURE SET:")
-roles = {"casualty_severity": "← TARGET",
-         "number_of_casualties": "← Stage 1 target",
-         "collision_index": "← Grouping key (dropped before modelling)"}
+roles = {"casualty_severity": "<-- TARGET",
+         "number_of_casualties": "<-- Stage 1 target",
+         "collision_index": "<-- Grouping key (dropped before modelling)"}
 for i, c in enumerate(df.columns, 1):
     print(f"  {i:2d}. {c:32s} {roles.get(c, '')}")
 
@@ -226,7 +226,7 @@ test_df.to_csv("dataset/processed/merged_test.csv", index=False)
 # ══════════════════════════════════════════════════════════════
 # [12] AUTO-GENERATE DOCUMENTATION
 # ══════════════════════════════════════════════════════════════
-with open("docs/column_removal_log.md", "w") as f:
+with open("docs/column_removal_log.md", "w", encoding="utf-8") as f:
     f.write("# Column Removal Log\n\n")
     f.write("## Dropped: Leakage columns (encode the target)\n\n")
     f.write("| Column | Reason |\n|---|---|\n")
@@ -241,6 +241,6 @@ with open("docs/column_removal_log.md", "w") as f:
         f.write(f"- `{c}` {roles.get(c, '')}\n")
     f.write(f"\n**Final shape:** {df.shape[0]:,} rows × {df.shape[1]} columns\n")
 
-print("\n✅ Saved merged_train.csv + merged_test.csv → dataset/processed/")
-print("✅ Saved column_removal_log.md → docs/")
+print("\n[OK] Saved merged_train.csv + merged_test.csv -> dataset/processed/")
+print("[OK] Saved column_removal_log.md -> docs/")
 print("\nReady for Stage 1 (regression).")
