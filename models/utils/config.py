@@ -7,10 +7,10 @@ ROOT = Path(__file__).resolve().parents[2]
 PROCESSED   = ROOT / "dataset" / "processed"
 MODELS_DIR  = ROOT / "models" / "saved_models"
 RESULTS_DIR = ROOT / "models" / "evaluation" / "results"
-STAGE1_DIR  = ROOT / "models" / "stage1_regression"
+STAGE2_DIR  = ROOT / "models" / "stage2_regression"
 
 # Create dirs if they don't exist
-for d in [PROCESSED, MODELS_DIR, RESULTS_DIR, STAGE1_DIR]:
+for d in [PROCESSED, MODELS_DIR, RESULTS_DIR, STAGE2_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 # Constants

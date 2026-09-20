@@ -16,7 +16,7 @@ from pathlib import Path
 MODELS_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(MODELS_DIR))
 
-from utils.config import STAGE1_DIR, MODELS_DIR as SAVE_DIR, RESULTS_DIR, PROCESSED
+from utils.config import STAGE2_DIR, MODELS_DIR as SAVE_DIR, RESULTS_DIR, PROCESSED
 
 print("=" * 60)
 print("STAGE 1C: Compare Regressors + Generate risk_score")
@@ -24,9 +24,9 @@ print("=" * 60)
 
 # [1] Load metrics from both models
 print("\n[1] Loading metrics...")
-with open(STAGE1_DIR / "lr_metrics.json") as f:
+with open(STAGE2_DIR / "lr_metrics.json") as f:
     lr_metrics = json.load(f)
-with open(STAGE1_DIR / "dt_metrics.json") as f:
+with open(STAGE2_DIR / "dt_metrics.json") as f:
     dt_metrics = json.load(f)
 
 # [2] Comparison table
@@ -49,7 +49,7 @@ results_df.to_csv(RESULTS_DIR / "stage1_metrics.csv", index=False)
 print("\n[4] Generating risk_score...")
 
 # Load OOF predictions for the best model (train risk_score = OOF, no leakage)
-oof_df = pd.read_csv(STAGE1_DIR / f"{best_name}_oof_predictions.csv",
+oof_df = pd.read_csv(STAGE2_DIR / f"{best_name}_oof_predictions.csv",
                      converters={"collision_index": str})
 train_risk_map = dict(zip(oof_df["collision_index"], oof_df["oof_pred"]))
 

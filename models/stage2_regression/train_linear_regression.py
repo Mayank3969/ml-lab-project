@@ -17,7 +17,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import KFold, cross_val_predict
 from sklearn.metrics import mean_squared_error, r2_score
-from utils.config import SEED, STAGE1_FEATURES, STAGE1_TARGET, STAGE1_DIR, MODELS_DIR as SAVE_DIR
+from utils.config import SEED, STAGE1_FEATURES, STAGE1_TARGET, STAGE2_DIR, MODELS_DIR as SAVE_DIR
 from utils.preprocessing import load_merged, collapse_to_collision, build_stage1_preprocessor
 
 print("=" * 60)
@@ -51,7 +51,7 @@ print(f"  R2:   {r2:.4f}")
 
 # Save metrics
 metrics = {"model": "LinearRegression", "RMSE": rmse, "R2": r2}
-with open(STAGE1_DIR / "lr_metrics.json", "w") as f:
+with open(STAGE2_DIR / "lr_metrics.json", "w") as f:
     json.dump(metrics, f, indent=2)
 
 # Save OOF predictions (collision_index + prediction)
@@ -59,7 +59,7 @@ oof_df = pd.DataFrame({
     "collision_index": train_col["collision_index"],
     "oof_pred": oof_preds
 })
-oof_df.to_csv(STAGE1_DIR / "lr_oof_predictions.csv", index=False)
+oof_df.to_csv(STAGE2_DIR / "lr_oof_predictions.csv", index=False)
 
 # Fit on full train and save model
 model.fit(X, y)
