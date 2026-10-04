@@ -1,246 +1,300 @@
 import os
+import json
+import hashlib
 import pandas as pd
-from sklearn.model_selection import GroupShuffleSplit
+import numpy as np
+import functools
+import argparse
+from sklearn.model_selection import StratifiedGroupKFold, cross_val_score
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import f1_score
+
+print = functools.partial(print, flush=True)
+
+# Parse arguments for --refresh-features
+parser = argparse.ArgumentParser()
+parser.add_argument('--refresh-features', action='store_true', help='Force re-run of ablation study')
+args, unknown = parser.parse_known_args()
+
+def hash_file(filepath):
+    hasher = hashlib.md5()
+    with open(filepath, 'rb') as f:
+        buf = f.read()
+        hasher.update(buf)
+    return hasher.hexdigest()
+
+# Paths
+CAS_PATH = "dataset/raw/casualty.csv"
+COL_PATH = "dataset/raw/collision.csv"
+VEH_PATH = "dataset/raw/vehicle.csv"
+SELECTION_JSON = "models/saved_models/feature_selection.json"
 
 os.makedirs("dataset/processed", exist_ok=True)
+os.makedirs("models/saved_models", exist_ok=True)
 os.makedirs("docs", exist_ok=True)
 
 print("=" * 70)
-print("STEP 3: Merge -> Cleanup -> Deduplicate -> Split 80/20")
+print("STEP 3: Merge -> Clean -> Train/Test Split -> Data-Driven Ablation")
 print("=" * 70)
 
-# ══════════════════════════════════════════════════════════════
-# [1] LOAD RAW DATA (IDs forced to text so they don't break)
-# ══════════════════════════════════════════════════════════════
-print("\n[1] Loading raw data...")
-cas = pd.read_csv("dataset/raw/casualty.csv",
-                  converters={"collision_index": str, "vehicle_reference": str},
-                  low_memory=False)
-col = pd.read_csv("dataset/raw/collision.csv",
-                  converters={"collision_index": str},
-                  low_memory=False)
-veh = pd.read_csv("dataset/raw/vehicle.csv",
-                  converters={"collision_index": str, "vehicle_reference": str},
-                  low_memory=False)
+# Calculate hashes
+print("[1] Verifying input hashes...")
+current_hashes = {
+    "casualty": hash_file(CAS_PATH),
+    "collision": hash_file(COL_PATH),
+    "vehicle": hash_file(VEH_PATH)
+}
 
-print(f"  casualty : {cas.shape[0]:>8,} rows × {cas.shape[1]} cols")
-print(f"  collision: {col.shape[0]:>8,} rows × {col.shape[1]} cols")
-print(f"  vehicle  : {veh.shape[0]:>8,} rows × {veh.shape[1]} cols")
-
-# ══════════════════════════════════════════════════════════════
-# [2] PRE-MERGE DUPLICATE KEY CHECK (cause of row multiplication)
-# ══════════════════════════════════════════════════════════════
-print("\n[2] Checking join keys for duplicates BEFORE merge...")
-col_dupes = col["collision_index"].duplicated().sum()
-veh_dupes = veh.duplicated(subset=["collision_index", "vehicle_reference"]).sum()
-print(f"  duplicate collision_index in collision.csv          : {col_dupes:,}")
-print(f"  duplicate (collision+vehicle) keys in vehicle.csv   : {veh_dupes:,}")
-if col_dupes == 0 and veh_dupes == 0:
-    print("  ✓ Join keys are unique — merge will NOT multiply rows")
+cached_features = None
+if os.path.exists(SELECTION_JSON) and not args.refresh_features:
+    with open(SELECTION_JSON, "r", encoding="utf-8") as f:
+        cache_data = json.load(f)
+    if cache_data.get("input_hashes") == current_hashes:
+        cached_features = cache_data
+        print("  => MATCH: Loading feature selection from cache.")
+    else:
+        print("  => MISMATCH: Data changed. Forcing re-run of ablation.")
+elif args.refresh_features:
+    print("  => --refresh-features flag detected. Forcing re-run.")
 else:
-    print("  ⚠️  Duplicates found — merge may inflate rows (will check after)")
+    print("  => Cache not found. Running ablation.")
 
-# ══════════════════════════════════════════════════════════════
-# [3] MERGE
-# ══════════════════════════════════════════════════════════════
-print("\n[3] Merging: casualty ← collision ← vehicle ...")
+# Load Data
+print("\n[2] Loading raw data...")
+cas = pd.read_csv(CAS_PATH, converters={"collision_index": str, "vehicle_reference": str}, low_memory=False)
+col = pd.read_csv(COL_PATH, converters={"collision_index": str}, low_memory=False)
+veh = pd.read_csv(VEH_PATH, converters={"collision_index": str, "vehicle_reference": str}, low_memory=False)
+
+print("\n[3] Merging: casualty <- collision <- vehicle ...")
 df = cas.merge(col, on="collision_index", how="inner", suffixes=("", "_col"))
-df = df.merge(veh, on=["collision_index", "vehicle_reference"],
-              how="left", suffixes=("", "_veh"))
+df = df.merge(veh, on=["collision_index", "vehicle_reference"], how="left", suffixes=("", "_veh"))
 
-if df.shape[0] > cas.shape[0]:
-    print(f"  ⚠️  JOIN INFLATION: {cas.shape[0]:,} → {df.shape[0]:,} rows "
-          f"(+{df.shape[0]-cas.shape[0]:,})")
-else:
-    print(f"  ✓ No inflation. Merged shape: {df.shape[0]:,} rows × {df.shape[1]} cols")
-
-# ══════════════════════════════════════════════════════════════
-# [4] DROP LEAKAGE COLUMNS (9) — these encode the answer
-# ══════════════════════════════════════════════════════════════
-print("\n[4] Dropping 9 LEAKAGE columns...")
-leakage_cols = {
-    "collision_severity": "Directly encodes target severity",
-    "enhanced_severity_collision": "Adjusted severity, encodes target",
-    "collision_injury_based": "Injury-based severity, encodes target",
-    "collision_adjusted_severity_serious": "Binary encoding of target",
-    "collision_adjusted_severity_slight": "Binary encoding of target",
-    "enhanced_casualty_severity": "Adjusted casualty severity, encodes target",
-    "casualty_injury_based": "Injury-based severity, encodes target",
-    "casualty_adjusted_severity_serious": "Binary encoding of target",
-    "casualty_adjusted_severity_slight": "Binary encoding of target",
-}
-for c in leakage_cols:
-    if c in df.columns:
-        df.drop(columns=[c], inplace=True)
-        print(f"  ✗ {c:42s} → {leakage_cols[c]}")
-
-# ══════════════════════════════════════════════════════════════
-# [5] DROP IRRELEVANT COLUMNS — not environmental/road conditions
-# ══════════════════════════════════════════════════════════════
-print("\n[5] Dropping IRRELEVANT columns...")
-irrelevant_cols = {
-    # Geographic / location
-    "location_easting_osgr": "Grid coordinate, not a road condition",
-    "location_northing_osgr": "Grid coordinate, not a road condition",
-    "longitude": "GPS coordinate, causes location overfitting",
-    "latitude": "GPS coordinate, causes location overfitting",
-    "lsoa_of_accident_location": "Area code, not a road condition",
-    "local_authority_district": "Admin area, not a road condition",
-    "local_authority_ons_district": "Admin area code",
-    "local_authority_highway": "Admin area code",
-    "local_authority_highway_current": "Admin area code",
-    "police_force": "Police jurisdiction, not a road condition",
-    "lsoa_of_casualty": "Casualty home area, irrelevant",
-    "lsoa_of_driver": "Driver home area, irrelevant",
-    # IDs / references
-    "collision_year": "All values are 2025, zero variance",
-    "collision_ref_no": "Unique ID, no predictive value",
-    "vehicle_reference": "Join key only, not a feature",
-    "casualty_reference": "Unique ID within collision",
-    # Date / time (too specific)
-    "date": "Specific date doesn't generalize",
-    "time": "Too granular (day_of_week captures the pattern)",
-    # Specific road identifiers (cause overfitting)
-    "first_road_number": "Identifies a specific road, overfitting",
-    "second_road_class": "Secondary road, low relevance",
-    "second_road_number": "Identifies a specific road, overfitting",
-    # Pedestrian crossing (granular / mostly empty)
-    "pedestrian_crossing_human_control_historic": "Historic, mostly empty",
-    "pedestrian_crossing_physical_facilities_historic": "Historic, mostly empty",
-    "pedestrian_crossing": "Too granular for this use case",
-    # Administrative / post-accident
-    "did_police_officer_attend_scene_of_accident": "Post-accident response, not a condition",
-    "trunk_road_flag": "Already captured by road_type",
-    # Historic / superseded
-    "junction_detail_historic": "Superseded by junction_detail",
-    "carriageway_hazards_historic": "Superseded by carriageway_hazards",
-    "vehicle_manoeuvre_historic": "Superseded by vehicle_manoeuvre",
-    "journey_purpose_of_driver_historic": "Superseded",
-    "vehicle_location_restricted_lane_historic": "Superseded",
-    # Casualty demographics (not environmental/road)
-    "sex_of_casualty": "Demographic, not a road condition",
-    "age_of_casualty": "Demographic, not a road condition",
-    "age_band_of_casualty": "Demographic, not a road condition",
-    "pedestrian_location": "Granular position detail",
-    "pedestrian_movement": "Granular position detail",
-    "car_passenger": "Position detail, not road condition",
-    "bus_or_coach_passenger": "Position detail, not road condition",
-    "pedestrian_road_maintenance_worker": "Too specific",
-    "casualty_imd_decile": "Socioeconomic status, not road condition",
-    "casualty_distance_banding": "Distance metric, not road condition",
-    # Vehicle details (not environmental/road)
-    "vehicle_type": "Vehicle characteristic, not road condition",
-    "towing_and_articulation": "Vehicle configuration",
-    "vehicle_manoeuvre": "Driver action, not road condition",
-    "vehicle_direction_from": "Direction, not road condition",
-    "vehicle_direction_to": "Direction, not road condition",
-    "vehicle_location_restricted_lane": "Lane position, not road condition",
-    "junction_location": "Position in junction, not road condition",
-    "skidding_and_overturning": "Accident dynamics, not road condition",
-    "hit_object_in_carriageway": "Accident dynamics, not road condition",
-    "vehicle_leaving_carriageway": "Accident dynamics, not road condition",
-    "hit_object_off_carriageway": "Accident dynamics, not road condition",
-    "first_point_of_impact": "Accident dynamics, not road condition",
-    "vehicle_left_hand_drive": "Vehicle configuration",
-    "journey_purpose_of_driver": "Driver context, not road condition",
-    "sex_of_driver": "Driver demographic, not road condition",
-    "age_of_driver": "Driver demographic, not road condition",
-    "age_band_of_driver": "Driver demographic, not road condition",
-    "engine_capacity_cc": "Vehicle specification",
-    "propulsion_code": "Vehicle specification",
-    "age_of_vehicle": "Vehicle specification",
-    "generic_make_model": "Vehicle identity, causes overfitting",
-    "driver_imd_decile": "Socioeconomic status, not road condition",
-    "escooter_flag": "Vehicle type flag",
-    "driver_distance_banding": "Distance metric, not road condition",
-}
-removed = []
-for c in irrelevant_cols:
-    if c in df.columns:
-        df.drop(columns=[c], inplace=True)
-        removed.append(c)
-        print(f"  ✗ {c:42s} → {irrelevant_cols[c]}")
-print(f"\n  Removed {len(removed)} irrelevant columns")
-
-# ══════════════════════════════════════════════════════════════
-# [6] WHAT'S LEFT
-# ══════════════════════════════════════════════════════════════
-print("\n[6] FINAL FEATURE SET:")
-roles = {"casualty_severity": "<-- TARGET",
-         "number_of_casualties": "<-- Stage 1 target",
-         "collision_index": "<-- Grouping key (dropped before modelling)"}
-for i, c in enumerate(df.columns, 1):
-    print(f"  {i:2d}. {c:32s} {roles.get(c, '')}")
-
-# ══════════════════════════════════════════════════════════════
-# [7] FINAL DUPLICATE CHECK
-# ══════════════════════════════════════════════════════════════
-print("\n[7] Final duplicate-row check...")
-dupes = df.duplicated().sum()
-print(f"  Exact duplicate rows: {dupes:,}")
-if dupes > 0:
-    df = df.drop_duplicates()
-    print(f"  Removed them → {df.shape[0]:,} rows remain")
-
-# ══════════════════════════════════════════════════════════════
-# [8] CLEAN + CONVERT
-# ══════════════════════════════════════════════════════════════
-print("\n[8] Cleaning & converting dtypes...")
+JUNK = ["collision_year_col", "collision_ref_no_col", "collision_year_veh", "collision_ref_no_veh"]
+df.drop(columns=[c for c in JUNK if c in df.columns], inplace=True)
 df = df.dropna(subset=["casualty_severity"])
+
+feature_cols = [c for c in df.columns if c not in ["collision_index", "casualty_severity"]]
+wrong_dupes = df.duplicated(subset=feature_cols).sum()
+correct_dupes = df.duplicated(subset=feature_cols + ["collision_index", "casualty_severity"]).sum()
+df = df.drop_duplicates(subset=feature_cols + ["collision_index", "casualty_severity"])
+
+print("\n[4] Pre-Filter: Dropping Leakage, IDs, Historic, and Zero-Variance columns...")
+prefilter_dropped = []
+
+leakage_and_ids = [
+    "collision_severity", "enhanced_severity_collision", "collision_injury_based",
+    "collision_adjusted_severity_serious", "collision_adjusted_severity_slight",
+    "enhanced_casualty_severity", "casualty_injury_based",
+    "casualty_adjusted_severity_serious", "casualty_adjusted_severity_slight",
+    "location_easting_osgr", "location_northing_osgr", "longitude", "latitude",
+    "lsoa_of_accident_location", "lsoa_of_casualty", "lsoa_of_driver",
+    "local_authority_district", "local_authority_ons_district", "local_authority_highway", "local_authority_highway_current",
+    "police_force", "collision_ref_no", "vehicle_reference", "casualty_reference",
+    "first_road_number", "second_road_number", "generic_make_model",
+    "date", "time", "collision_year"
+]
+historic_cols = [c for c in df.columns if c.endswith("_historic")]
+
+drop_list = set(leakage_and_ids + historic_cols)
+for c in drop_list:
+    if c in df.columns:
+        df.drop(columns=[c], inplace=True)
+        prefilter_dropped.append({"col": c, "reason": "Historic/Leakage/ID"})
+
 for c in df.columns:
     if c != "collision_index":
         df[c] = pd.to_numeric(df[c], errors="coerce")
 num_cols = [c for c in df.columns if c != "collision_index"]
 df[num_cols] = df[num_cols].fillna(-1).astype(int)
 
-# ══════════════════════════════════════════════════════════════
-# [9] TARGET DISTRIBUTION
-# ══════════════════════════════════════════════════════════════
-print("\n[9] Target distribution:")
-labels = {1: "Fatal", 2: "Serious", 3: "Slight"}
-counts = df["casualty_severity"].value_counts().sort_index()
-for sev, n in counts.items():
-    print(f"  {sev} ({labels[sev]:8s}): {n:>7,}  ({n/len(df)*100:5.2f}%)")
+# Zero variance check
+for c in [x for x in df.columns if x not in ["collision_index", "casualty_severity"]]:
+    if df[c].nunique() <= 1:
+        df.drop(columns=[c], inplace=True)
+        prefilter_dropped.append({"col": c, "reason": "Zero variance"})
 
-# ══════════════════════════════════════════════════════════════
-# [10] SPLIT 80/20 (group-aware)
-# ══════════════════════════════════════════════════════════════
-print("\n[10] Splitting 80/20 (same collision never in both sets)...")
-groups = df["collision_index"].values
-y = df["casualty_severity"].values
-gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
-train_idx, test_idx = next(gss.split(df, y, groups))
+sgkf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
+train_idx, test_idx = next(sgkf.split(df, df["casualty_severity"], df["collision_index"]))
+
 train_df = df.iloc[train_idx].copy()
 test_df = df.iloc[test_idx].copy()
 
-overlap = set(train_df["collision_index"]) & set(test_df["collision_index"])
-print(f"  Train: {len(train_df):,} rows | Test: {len(test_df):,} rows")
-print(f"  Collisions in BOTH sets: {len(overlap)}  (must be 0)")
+if cached_features:
+    kept_cols = cached_features["selected_features"]
+    ablation_log_text = cached_features.get("ablation_log_text", "Loaded from cache.")
+else:
+    print("\n[5] Feature Importance Profiling (with Shadow Feature) on TRAIN...")
+    
+    candidate_cols = [c for c in train_df.columns if c not in ["casualty_severity", "number_of_casualties", "collision_index"]]
+    X = train_df[candidate_cols].copy()
+    y = train_df["casualty_severity"]
+    groups = train_df["collision_index"]
+    
+    # Add shadow column
+    np.random.seed(42)
+    X["_SHADOW_"] = np.random.permutation(X[candidate_cols[0]].values)
+    
+    clf = DecisionTreeClassifier(random_state=42)
+    
+    cv_splits = list(sgkf.split(X, y, groups))
+    importances_matrix = []
+    
+    # 5-fold CV to average feature importances
+    for tr_idx, val_idx in cv_splits:
+        X_tr, y_tr = X.iloc[tr_idx], y.iloc[tr_idx]
+        clf.fit(X_tr, y_tr)
+        importances_matrix.append(clf.feature_importances_)
+        
+    imp_mean = np.mean(importances_matrix, axis=0)
+    imp_std = np.std(importances_matrix, axis=0)
+    
+    # Map back to columns
+    feature_imp = {}
+    for i, col in enumerate(X.columns):
+        feature_imp[col] = {"mean": imp_mean[i], "std": imp_std[i]}
+        
+    shadow_mean = feature_imp["_SHADOW_"]["mean"]
+    print(f"  Shadow feature baseline importance: {shadow_mean:.5f}")
+    
+    # Sort candidates (excluding shadow) by mean importance descending
+    candidates_sorted = sorted(candidate_cols, key=lambda c: feature_imp[c]["mean"], reverse=True)
+    
+    hard_drop = []
+    hard_keep = []
+    ambiguous = []
+    
+    total_importance = sum(feature_imp[c]["mean"] for c in candidate_cols if feature_imp[c]["mean"] > shadow_mean)
+    cumulative_importance = 0
+    
+    for c in candidates_sorted:
+        mean_imp = feature_imp[c]["mean"]
+        std_imp = feature_imp[c]["std"]
+        
+        # Hard drop rule
+        if mean_imp <= shadow_mean:
+            hard_drop.append({"col": c, "reason": f"<= Shadow (Mean: {mean_imp:.5f})"})
+            continue
+            
+        # Add to cumulative
+        cumulative_importance += mean_imp
+        cum_ratio = cumulative_importance / total_importance if total_importance > 0 else 1.0
+        
+        # Routing logic
+        # High variance (std > mean * 0.5) pushes it to ambiguous if it's not the absolute top feature
+        if cum_ratio <= 0.95 and (std_imp < mean_imp * 0.5):
+            hard_keep.append({"col": c, "reason": f"Top 95% (Mean: {mean_imp:.5f})"})
+        elif cum_ratio <= 0.99 or (cum_ratio <= 0.95 and std_imp >= mean_imp * 0.5):
+            ambiguous.append(c)
+        else:
+            hard_drop.append({"col": c, "reason": f">99% Tail (Mean: {mean_imp:.5f})"})
+            
+    print(f"  Hard Keep: {len(hard_keep)} | Ambiguous: {len(ambiguous)} | Hard Drop: {len(hard_drop)}")
+    
+    kept_cols = [x["col"] for x in hard_keep]
+    ambiguous_log = []
+    
+    if ambiguous:
+        print("\n[6] Targeted Leave-One-Out CV for Ambiguous Features...")
+        X_base = train_df[kept_cols + ambiguous]
+        
+        def eval_subset(feats):
+            scores = cross_val_score(DecisionTreeClassifier(random_state=42), X_base[feats], y, groups=groups, cv=cv_splits, scoring='f1_macro', n_jobs=-1)
+            return np.mean(scores)
+            
+        baseline_f1 = eval_subset(kept_cols + ambiguous)
+        print(f"  Ambiguous Baseline Macro-F1: {baseline_f1:.4f}")
+        
+        for c in ambiguous:
+            feats_without = [f for f in kept_cols + ambiguous if f != c]
+            f1_without = eval_subset(feats_without)
+            delta = baseline_f1 - f1_without
+            if delta >= 0:
+                kept_cols.append(c)
+                ambiguous_log.append({"col": c, "action": "KEEP", "delta": delta, "reason": "Positive/Neutral delta"})
+                print(f"  [KEEP] {c:35s} | delta: {delta:+.5f}")
+            else:
+                ambiguous_log.append({"col": c, "action": "DROP", "delta": delta, "reason": "Negative delta"})
+                print(f"  [DROP] {c:35s} | delta: {delta:+.5f}")
+                
+    else:
+        print("\n[6] No ambiguous features to check.")
+        baseline_f1 = 0
+        
+    print(f"\n  Final Kept Features: {len(kept_cols)}")
+    
+    # Build ablation log
+    log_lines = [
+        "# Stage 1 Feature Selection (Shadow + Cumulative Importance)",
+        "",
+        f"**Duplicate Row Check:**",
+        f"- Features ONLY: {wrong_dupes} (wrongly dropped)",
+        f"- Features + keys: {correct_dupes} (safely dropped)",
+        "",
+        "## 1. Pre-filtered (Historic / ID / Zero Variance)",
+        "| Feature | Reason |",
+        "|---|---|",
+        *([f"| `{x['col']}` | {x['reason']} |" for x in prefilter_dropped]),
+        "",
+        "## 2. Hard Keep (Top 95% Cumulative Importance)",
+        "| Feature | Reason |",
+        "|---|---|",
+        *([f"| `{x['col']}` | {x['reason']} |" for x in hard_keep]),
+        "",
+        "## 3. Targeted Leave-One-Out (Ambiguous 95-99% or High StdDev)",
+        f"**Baseline Macro-F1:** `{baseline_f1:.4f}`\n",
+        "| Feature | Delta | Action |",
+        "|---|---|---|",
+        *([f"| `{x['col']}` | {x['delta']:+.5f} | {x['action']} |" for x in ambiguous_log]),
+        "",
+        "## 4. Hard Drop (<= Shadow Mean or >99% Tail)",
+        "| Feature | Reason |",
+        "|---|---|",
+        *([f"| `{x['col']}` | {x['reason']} |" for x in hard_drop])
+    ]
+    ablation_log_text = "\n".join(log_lines)
+    
+    with open("docs/ablation_log.md", "w", encoding="utf-8") as f:
+        f.write(ablation_log_text)
+        
+print("\n[7] Applying Frequency Encoding for Nominal Columns...")
+ORDINAL_COLS = ["speed_limit", "age_of_casualty", "age_of_driver", "age_of_vehicle", "engine_capacity_cc", "age_band_of_casualty", "age_band_of_driver"]
+nominal_cols = [c for c in kept_cols if c not in ORDINAL_COLS]
 
-# ══════════════════════════════════════════════════════════════
-# [11] SAVE
-# ══════════════════════════════════════════════════════════════
+always_keep = ["casualty_severity", "number_of_casualties", "collision_index"]
+train_df = train_df[kept_cols + always_keep].copy()
+test_df = test_df[kept_cols + always_keep].copy()
+
+# Frequency encoding avoids the curse of dimensionality & OOM for KNN/distance models
+freq_maps = {}
+for c in nominal_cols:
+    freq = train_df[c].value_counts(normalize=True).to_dict()
+    freq_maps[c] = freq
+    train_df[c] = train_df[c].map(freq).fillna(0)
+    test_df[c] = test_df[c].map(freq).fillna(0)
+
+# Log specific demographic decisions explicitly
+print("\n  [Validation] Demographic Features Keep/Drop Status:")
+for demo in ["age_of_driver", "sex_of_driver", "driver_imd_decile", "casualty_imd_decile", "escooter_flag"]:
+    status = "KEPT" if demo in kept_cols else "DROPPED"
+    print(f"    - {demo}: {status}")
+
+print(f"\n  Final merged_train.csv shape: {train_df.shape}")
+print(f"  Feature columns ({len(kept_cols)}): {kept_cols}")
+
+# Save Cache
+cache_data = {
+    "input_hashes": current_hashes,
+    "selected_features": kept_cols,
+    "nominal_cols": nominal_cols,
+    "ordinal_cols": [c for c in kept_cols if c in ORDINAL_COLS],
+    "final_encoded_cols": kept_cols,
+    "frequency_encodings": freq_maps,
+    "ablation_log_text": ablation_log_text
+}
+with open(SELECTION_JSON, "w", encoding="utf-8") as f:
+    json.dump(cache_data, f, indent=4)
+
+print("\n[8] Saving Data...")
 train_df.to_csv("dataset/processed/merged_train.csv", index=False)
 test_df.to_csv("dataset/processed/merged_test.csv", index=False)
-
-# ══════════════════════════════════════════════════════════════
-# [12] AUTO-GENERATE DOCUMENTATION
-# ══════════════════════════════════════════════════════════════
-with open("docs/column_removal_log.md", "w", encoding="utf-8") as f:
-    f.write("# Column Removal Log\n\n")
-    f.write("## Dropped: Leakage columns (encode the target)\n\n")
-    f.write("| Column | Reason |\n|---|---|\n")
-    for c, r in leakage_cols.items():
-        f.write(f"| `{c}` | {r} |\n")
-    f.write("\n## Dropped: Irrelevant columns (not environmental/road conditions)\n\n")
-    f.write("| Column | Reason |\n|---|---|\n")
-    for c, r in irrelevant_cols.items():
-        f.write(f"| `{c}` | {r} |\n")
-    f.write("\n## Kept: Final feature set\n\n")
-    for c in df.columns:
-        f.write(f"- `{c}` {roles.get(c, '')}\n")
-    f.write(f"\n**Final shape:** {df.shape[0]:,} rows × {df.shape[1]} columns\n")
-
-print("\n[OK] Saved merged_train.csv + merged_test.csv -> dataset/processed/")
-print("[OK] Saved column_removal_log.md -> docs/")
-print("\nReady for Stage 1 (regression).")
+print("[OK] Saved merged datasets.")

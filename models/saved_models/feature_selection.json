@@ -1,0 +1,151 @@
+{
+    "input_hashes": {
+        "casualty": "871b76a05b282ea9f00107e24ccc6a11",
+        "collision": "31a8dbd390036b14146f67647319dcd1",
+        "vehicle": "b1adfcc04f3b682c3df3d46ded05179a"
+    },
+    "selected_features": [
+        "age_of_casualty",
+        "engine_capacity_cc",
+        "age_of_driver",
+        "day_of_week",
+        "casualty_type",
+        "casualty_imd_decile",
+        "vehicle_direction_to",
+        "vehicle_direction_from",
+        "driver_imd_decile",
+        "did_police_officer_attend_scene_of_accident",
+        "journey_purpose_of_driver"
+    ],
+    "nominal_cols": [
+        "day_of_week",
+        "casualty_type",
+        "casualty_imd_decile",
+        "vehicle_direction_to",
+        "vehicle_direction_from",
+        "driver_imd_decile",
+        "did_police_officer_attend_scene_of_accident",
+        "journey_purpose_of_driver"
+    ],
+    "ordinal_cols": [
+        "age_of_casualty",
+        "engine_capacity_cc",
+        "age_of_driver"
+    ],
+    "final_encoded_cols": [
+        "age_of_casualty",
+        "engine_capacity_cc",
+        "age_of_driver",
+        "day_of_week",
+        "casualty_type",
+        "casualty_imd_decile",
+        "vehicle_direction_to",
+        "vehicle_direction_from",
+        "driver_imd_decile",
+        "did_police_officer_attend_scene_of_accident",
+        "journey_purpose_of_driver"
+    ],
+    "frequency_encodings": {
+        "day_of_week": {
+            "6": 0.16456673671863545,
+            "4": 0.14875128292849812,
+            "5": 0.14661062509163775,
+            "3": 0.14345339914960167,
+            "2": 0.13976833976833977,
+            "7": 0.1396510434485118,
+            "1": 0.11719857289477542
+        },
+        "casualty_type": {
+            "9": 0.5160060603098577,
+            "0": 0.15543717315869215,
+            "1": 0.12514539856312007,
+            "3": 0.05688871511656322,
+            "5": 0.03788671130443282,
+            "19": 0.03108352475441083,
+            "11": 0.016460583549191145,
+            "4": 0.013127413127413128,
+            "8": 0.012775524167929231,
+            "-1": 0.00945212843947021,
+            "2": 0.005639998045061336,
+            "23": 0.0037534822344948925,
+            "21": 0.0031474512487170716,
+            "97": 0.002932407995699135,
+            "90": 0.0025707443428962416,
+            "22": 0.0021308831435413716,
+            "10": 0.0017692194907384781,
+            "20": 0.001505302771125556,
+            "98": 0.0009090464786667318,
+            "17": 0.0006255803724158155,
+            "16": 0.0005082840525878501,
+            "99": 0.00012707101314696253,
+            "18": 0.00011729631982796539
+        },
+        "casualty_imd_decile": {
+            "-1": 0.11496016812472509,
+            "2": 0.10714041346952739,
+            "3": 0.10614339475098969,
+            "1": 0.10479448707296808,
+            "4": 0.09680856263134745,
+            "5": 0.09343629343629344,
+            "6": 0.08887151165632179,
+            "7": 0.08112995454767606,
+            "8": 0.07608621279507355,
+            "9": 0.07036801720346024,
+            "10": 0.06026098431161722
+        },
+        "vehicle_direction_to": {
+            "1": 0.1512242803382044,
+            "5": 0.1481550266360393,
+            "7": 0.13658178974634672,
+            "3": 0.1362201260935438,
+            "2": 0.0850789306485509,
+            "6": 0.08026978153560432,
+            "4": 0.07798250329895899,
+            "8": 0.07404330189140315,
+            "9": 0.0650799081178828,
+            "-1": 0.032833194858511314,
+            "0": 0.012531156834954304
+        },
+        "vehicle_direction_from": {
+            "1": 0.15845755339426226,
+            "5": 0.14834074580910023,
+            "3": 0.1379209227310493,
+            "7": 0.13199745857973705,
+            "6": 0.08119837740090904,
+            "2": 0.08108108108108109,
+            "4": 0.07555837935584771,
+            "8": 0.07452226186403402,
+            "9": 0.0650799081178828,
+            "-1": 0.03274522261864034,
+            "0": 0.013098089047456137
+        },
+        "driver_imd_decile": {
+            "-1": 0.13267191241874787,
+            "2": 0.10354332632813645,
+            "3": 0.10161771174429403,
+            "1": 0.10088460974536924,
+            "4": 0.09408142319534725,
+            "5": 0.09167684863887396,
+            "6": 0.08897903328283076,
+            "7": 0.08036752846879429,
+            "8": 0.07600801524852158,
+            "9": 0.06994770539074337,
+            "10": 0.060221885538341235
+        },
+        "did_police_officer_attend_scene_of_accident": {
+            "1": 0.7371878207321245,
+            "3": 0.20058648159913983,
+            "2": 0.06222569766873565
+        },
+        "journey_purpose_of_driver": {
+            "6": 0.4410048384731929,
+            "9": 0.2831337666780705,
+            "1": 0.11845950833292605,
+            "2": 0.11273153804799374,
+            "-1": 0.02786765065246078,
+            "7": 0.014613166511900689,
+            "8": 0.002189531303455354
+        }
+    },
+    "ablation_log_text": "# Stage 1 Feature Selection (Shadow + Cumulative Importance)\n\n**Duplicate Row Check:**\n- Features ONLY: 0 (wrongly dropped)\n- Features + keys: 0 (safely dropped)\n\n## 1. Pre-filtered (Historic / ID / Zero Variance)\n| Feature | Reason |\n|---|---|\n| `vehicle_location_restricted_lane_historic` | Historic/Leakage/ID |\n| `collision_severity` | Historic/Leakage/ID |\n| `pedestrian_crossing_human_control_historic` | Historic/Leakage/ID |\n| `pedestrian_crossing_physical_facilities_historic` | Historic/Leakage/ID |\n| `location_easting_osgr` | Historic/Leakage/ID |\n| `local_authority_district` | Historic/Leakage/ID |\n| `casualty_reference` | Historic/Leakage/ID |\n| `carriageway_hazards_historic` | Historic/Leakage/ID |\n| `enhanced_casualty_severity` | Historic/Leakage/ID |\n| `second_road_number` | Historic/Leakage/ID |\n| `casualty_injury_based` | Historic/Leakage/ID |\n| `local_authority_ons_district` | Historic/Leakage/ID |\n| `lsoa_of_casualty` | Historic/Leakage/ID |\n| `vehicle_manoeuvre_historic` | Historic/Leakage/ID |\n| `local_authority_highway_current` | Historic/Leakage/ID |\n| `date` | Historic/Leakage/ID |\n| `time` | Historic/Leakage/ID |\n| `casualty_adjusted_severity_slight` | Historic/Leakage/ID |\n| `junction_detail_historic` | Historic/Leakage/ID |\n| `longitude` | Historic/Leakage/ID |\n| `collision_adjusted_severity_serious` | Historic/Leakage/ID |\n| `journey_purpose_of_driver_historic` | Historic/Leakage/ID |\n| `generic_make_model` | Historic/Leakage/ID |\n| `casualty_adjusted_severity_serious` | Historic/Leakage/ID |\n| `collision_year` | Historic/Leakage/ID |\n| `latitude` | Historic/Leakage/ID |\n| `collision_adjusted_severity_slight` | Historic/Leakage/ID |\n| `collision_ref_no` | Historic/Leakage/ID |\n| `collision_injury_based` | Historic/Leakage/ID |\n| `location_northing_osgr` | Historic/Leakage/ID |\n| `vehicle_reference` | Historic/Leakage/ID |\n| `enhanced_severity_collision` | Historic/Leakage/ID |\n| `lsoa_of_accident_location` | Historic/Leakage/ID |\n| `police_force` | Historic/Leakage/ID |\n| `lsoa_of_driver` | Historic/Leakage/ID |\n| `first_road_number` | Historic/Leakage/ID |\n| `local_authority_highway` | Historic/Leakage/ID |\n| `age_of_vehicle` | Zero variance |\n\n## 2. Hard Keep (Top 95% Cumulative Importance)\n| Feature | Reason |\n|---|---|\n| `age_of_casualty` | Top 95% (Mean: 0.07369) |\n| `engine_capacity_cc` | Top 95% (Mean: 0.06010) |\n| `age_of_driver` | Top 95% (Mean: 0.05300) |\n| `day_of_week` | Top 95% (Mean: 0.04369) |\n| `casualty_type` | Top 95% (Mean: 0.04288) |\n| `casualty_imd_decile` | Top 95% (Mean: 0.04030) |\n| `vehicle_direction_to` | Top 95% (Mean: 0.03786) |\n| `vehicle_direction_from` | Top 95% (Mean: 0.03766) |\n| `driver_imd_decile` | Top 95% (Mean: 0.03617) |\n| `did_police_officer_attend_scene_of_accident` | Top 95% (Mean: 0.03532) |\n\n## 3. Targeted Leave-One-Out (Ambiguous 95-99% or High StdDev)\n**Baseline Macro-F1:** `0.3740`\n\n| Feature | Delta | Action |\n|---|---|---|\n| `journey_purpose_of_driver` | +0.00366 | KEEP |\n\n## 4. Hard Drop (<= Shadow Mean or >99% Tail)\n| Feature | Reason |\n|---|---|\n| `vehicle_manoeuvre` | >99% Tail (Mean: 0.02378) |\n| `speed_limit` | <= Shadow (Mean: 0.02238) |\n| `first_road_class` | <= Shadow (Mean: 0.02115) |\n| `first_point_of_impact` | <= Shadow (Mean: 0.02106) |\n| `junction_location` | <= Shadow (Mean: 0.02097) |\n| `junction_detail` | <= Shadow (Mean: 0.02034) |\n| `casualty_distance_banding` | <= Shadow (Mean: 0.02005) |\n| `second_road_class` | <= Shadow (Mean: 0.01902) |\n| `driver_distance_banding` | <= Shadow (Mean: 0.01871) |\n| `pedestrian_crossing` | <= Shadow (Mean: 0.01709) |\n| `number_of_vehicles` | <= Shadow (Mean: 0.01704) |\n| `age_band_of_casualty` | <= Shadow (Mean: 0.01610) |\n| `light_conditions` | <= Shadow (Mean: 0.01593) |\n| `skidding_and_overturning` | <= Shadow (Mean: 0.01580) |\n| `road_type` | <= Shadow (Mean: 0.01460) |\n| `vehicle_leaving_carriageway` | <= Shadow (Mean: 0.01435) |\n| `propulsion_code` | <= Shadow (Mean: 0.01396) |\n| `weather_conditions` | <= Shadow (Mean: 0.01328) |\n| `sex_of_casualty` | <= Shadow (Mean: 0.01258) |\n| `vehicle_type` | <= Shadow (Mean: 0.01218) |\n| `road_surface_conditions` | <= Shadow (Mean: 0.01198) |\n| `age_band_of_driver` | <= Shadow (Mean: 0.01131) |\n| `car_passenger` | <= Shadow (Mean: 0.01031) |\n| `hit_object_in_carriageway` | <= Shadow (Mean: 0.01023) |\n| `junction_control` | <= Shadow (Mean: 0.00959) |\n| `trunk_road_flag` | <= Shadow (Mean: 0.00955) |\n| `sex_of_driver` | <= Shadow (Mean: 0.00907) |\n| `urban_or_rural_area` | <= Shadow (Mean: 0.00860) |\n| `carriageway_hazards` | <= Shadow (Mean: 0.00842) |\n| `hit_object_off_carriageway` | <= Shadow (Mean: 0.00841) |\n| `vehicle_location_restricted_lane` | <= Shadow (Mean: 0.00737) |\n| `casualty_class` | <= Shadow (Mean: 0.00704) |\n| `pedestrian_location` | <= Shadow (Mean: 0.00692) |\n| `special_conditions_at_site` | <= Shadow (Mean: 0.00643) |\n| `pedestrian_movement` | <= Shadow (Mean: 0.00597) |\n| `vehicle_left_hand_drive` | <= Shadow (Mean: 0.00433) |\n| `towing_and_articulation` | <= Shadow (Mean: 0.00235) |\n| `pedestrian_road_maintenance_worker` | <= Shadow (Mean: 0.00112) |\n| `bus_or_coach_passenger` | <= Shadow (Mean: 0.00089) |\n| `escooter_flag` | <= Shadow (Mean: 0.00087) |"
+}

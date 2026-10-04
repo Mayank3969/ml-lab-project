@@ -30,14 +30,12 @@ LOG_FILE = ROOT / "pipeline_log.json"
 STEPS = [
     {
         "step": 1,
-        "name": "Stage 1 — Merge Raw Tables",
+        "name": "Stage 1 — Iterative Feature Selection & Stratified Split",
         "script": "models/stage1_merge/step3_build_dataset.py",
-        "description": "Joins collision.csv + vehicle.csv + casualty.csv at casualty level. "
-                       "Drops 9 leakage columns and ~35 irrelevant columns. "
-                       "Splits 80/20 grouped by collision_index (GroupShuffleSplit). "
-                       "Converts all features to numeric.",
-        "why": "Creates the clean, analysis-ready dataset from 3 raw sources. "
-               "Group-aware split prevents same-crash casualties leaking across train/test.",
+        "description": "Joins 3 raw tables. Runs 5-fold CV ablation study to dynamically select features. "
+                       "Splits 80/20 using StratifiedGroupKFold to maintain class proportions.",
+        "why": "Creates an analysis-ready dataset with optimal features backed by performance metrics, "
+               "while guaranteeing no leakage across train/test and balanced class ratios.",
         "inputs": [
             "dataset/raw/collision.csv",
             "dataset/raw/vehicle.csv",
@@ -46,81 +44,20 @@ STEPS = [
         "outputs": [
             "dataset/processed/merged_train.csv",
             "dataset/processed/merged_test.csv",
-            "docs/column_removal_log.md",
+            "docs/ablation_log.md",
+            "dataset/processed/selected_features.json"
         ],
     },
     {
         "step": 2,
-        "name": "Stage 1 — Fix Junk Columns",
-        "script": "models/stage1_merge/step3_fix.py",
-        "description": "Removes 4 residual columns (collision_year_col, collision_ref_no_col, "
-                       "collision_year_veh, collision_ref_no_veh) that survived the merge "
-                       "due to pandas suffix collisions.",
-        "why": "These columns are merge artifacts with no predictive value. "
-               "After this step merged CSVs have exactly 18 columns.",
+        "name": "Stage 2 — Train Risk Score Regressor & Ablation Test",
+        "script": "models/stage2_regression/train_risk_model.py",
+        "description": "Tunes Ridge and DecisionTree Regressor to predict number_of_casualties via CV GridSearch. "
+                       "Generates risk_score using OOF predictions. Tests if risk_score improves "
+                       "macro-F1 classification vs just number_of_casualties.",
+        "why": "Determines the absolute best model for generating the risk_score continuous signal, "
+               "and rigorously proves whether that signal is mathematically justified before keeping it.",
         "inputs": [
-            "dataset/processed/merged_train.csv",
-            "dataset/processed/merged_test.csv",
-        ],
-        "outputs": [
-            "dataset/processed/merged_train.csv",
-            "dataset/processed/merged_test.csv",
-            "docs/column_removal_log.md",
-        ],
-    },
-    {
-        "step": 3,
-        "name": "Stage 2 — Train Linear Regression",
-        "script": "models/stage2_regression/train_linear_regression.py",
-        "description": "Trains Linear Regression to predict number_of_casualties from "
-                       "5 collision-level features (speed_limit, road_type, junction_detail, "
-                       "light_conditions, weather_conditions). Uses 5-fold OOF predictions "
-                       "to avoid leakage. Saves model, OOF predictions, and metrics.",
-        "why": "One of two candidate models for generating the risk_score feature. "
-               "OOF ensures the risk_score on training rows was never seen during training.",
-        "inputs": [
-            "dataset/processed/merged_train.csv",
-        ],
-        "outputs": [
-            "models/stage2_regression/lr_metrics.json",
-            "models/stage2_regression/lr_oof_predictions.csv",
-            "models/saved_models/stage1_lr_model.pkl",
-        ],
-        "metrics_file": "models/stage2_regression/lr_metrics.json",
-    },
-    {
-        "step": 4,
-        "name": "Stage 2 — Train Decision Tree Regressor",
-        "script": "models/stage2_regression/train_decision_tree_regressor.py",
-        "description": "Trains Decision Tree Regressor on the same 5 collision-level features. "
-                       "Same 5-fold OOF approach as Linear Regression.",
-        "why": "Second candidate model. Compared against LR by R-squared to pick the winner.",
-        "inputs": [
-            "dataset/processed/merged_train.csv",
-        ],
-        "outputs": [
-            "models/stage2_regression/dt_metrics.json",
-            "models/stage2_regression/dt_oof_predictions.csv",
-            "models/saved_models/stage1_dt_model.pkl",
-        ],
-        "metrics_file": "models/stage2_regression/dt_metrics.json",
-    },
-    {
-        "step": 5,
-        "name": "Stage 2 — Compare Regressors & Generate risk_score",
-        "script": "models/stage2_regression/compare_regressor.py",
-        "description": "Compares LR vs DT by R-squared, picks the winner (LR, R2=0.023). "
-                       "Maps OOF risk_score onto train rows (no leakage). "
-                       "Retrains winner on full train set and predicts risk_score for test rows. "
-                       "Overwrites merged CSVs with the new risk_score column (18 -> 19 cols).",
-        "why": "The risk_score feature is the bridge between Stage 2 regression and "
-               "Stage 3A classification. It gives the classifiers a continuous signal "
-               "about expected casualty count.",
-        "inputs": [
-            "models/stage2_regression/lr_metrics.json",
-            "models/stage2_regression/dt_metrics.json",
-            "models/stage2_regression/lr_oof_predictions.csv",
-            "models/saved_models/stage1_lr_model.pkl",
             "dataset/processed/merged_train.csv",
             "dataset/processed/merged_test.csv",
         ],
@@ -128,57 +65,46 @@ STEPS = [
             "dataset/processed/merged_train.csv",
             "dataset/processed/merged_test.csv",
             "models/saved_models/stage1_best_regressor.pkl",
-            "models/evaluation/results/stage1_metrics.csv",
         ],
     },
     {
-        "step": 6,
-        "name": "Stage 3A Phase A — Out-of-Fold Meta-Feature Generation",
-        "script": "models/stage3a_base_classifiers/oof_generator.py",
-        "description": "5-fold StratifiedGroupKFold CV with 3 base classifiers "
-                       "(Logistic Regression, KNN k=15, Decision Tree). "
-                       "Each training row gets probability predictions from a model "
-                       "that never saw it. All 15 temporary models (3 x 5 folds) are destroyed. "
-                       "Output: 9 probability columns + risk_score + target.",
-        "why": "Creates leak-free training data for the meta-classifier. "
-               "If we predicted on training data directly, the meta-classifier would "
-               "learn to trust overconfident base model predictions and fail on test data.",
+        "step": 3,
+        "name": "Stage 3A — Profile Features for Model Suitability",
+        "script": "models/stage3a_base_classifiers/step1_profile_data.py",
+        "description": "Profiles final dimensionality and cardinality for theoretical suitability.",
+        "why": "Avoids blindly throwing algorithms at sparse high-dimensional data.",
         "inputs": [
-            "dataset/processed/merged_train.csv",
+            "models/saved_models/feature_selection.json",
+            "dataset/processed/merged_train.csv"
         ],
         "outputs": [
-            "dataset/processed/meta_train.csv",
+            "docs/data_profile.md",
         ],
     },
     {
-        "step": 7,
-        "name": "Stage 3A Phase B — Train Final Base Models & Generate meta_test",
-        "script": "models/stage3a_base_classifiers/final_models_trainer.py",
-        "description": "Trains 3 final base models on the full training set (no folding). "
-                       "Predicts class probabilities on the held-out test set. "
-                       "Saves the 3 model artifacts for Streamlit inference.",
-        "why": "These final models produce the test-side meta-features and are the "
-               "actual models loaded at inference time in the Streamlit app.",
+        "step": 4,
+        "name": "Stage 3A — Train & Tune Base Models",
+        "script": "models/stage3a_base_classifiers/train_base_models.py",
+        "description": "GridSearchCV tuning of LR, DecisionTree, and KNN. Generates OOF probabilities.",
+        "why": "Trains optimal base classifiers and creates leak-free meta-features for Stage 4.",
         "inputs": [
             "dataset/processed/merged_train.csv",
             "dataset/processed/merged_test.csv",
         ],
         "outputs": [
+            "dataset/processed/meta_train.csv",
             "dataset/processed/meta_test.csv",
             "models/saved_models/stage2_logreg_final.pkl",
-            "models/saved_models/stage2_knn_final.pkl",
             "models/saved_models/stage2_dt_final.pkl",
+            "models/saved_models/stage2_knn_final.pkl",
         ],
     },
     {
-        "step": 8,
+        "step": 5,
         "name": "Stage 4 — Train Meta-Classifier",
         "script": "models/stage4_meta_classifier/train_meta_classifier.py",
-        "description": "Trains stacking meta-classifier (Logistic Regression, class_weight=balanced) "
-                       "on exactly 10 features: 9 base model probabilities + risk_score. "
-                       "Evaluates on held-out test set. Saves confusion matrix.",
-        "why": "This is the final prediction model. It learns the optimal weighting "
-               "of 3 classifiers' opinions plus the regression risk score.",
+        "description": "Trains stacking meta-classifier on 9 probabilities + risk_score + number_of_casualties.",
+        "why": "Final model that learns to blend the base classifier opinions.",
         "inputs": [
             "dataset/processed/meta_train.csv",
             "dataset/processed/meta_test.csv",
@@ -189,25 +115,22 @@ STEPS = [
         ],
     },
     {
-        "step": 9,
+        "step": 6,
         "name": "Stage 5 — Baseline vs Pipeline Evaluation",
         "script": "models/evaluation/baseline_vs_pipeline.py",
-        "description": "Compares standalone base classifiers against the full stacking pipeline. "
-                       "Reports Macro-F1, Accuracy, and per-class F1 (Fatal, Serious, Slight). "
-                       "Computes headline delta: best standalone vs pipeline.",
-        "why": "This is the payoff — the answer to 'does the multi-stage pipeline beat "
-               "a single model?' Also checks Fatal-class recall, the most safety-critical metric.",
+        "description": "Compares standalone base classifiers against the full stacking pipeline.",
+        "why": "The final test of whether the pipeline beats a standalone model.",
         "inputs": [
-            "models/stage2_regression/lr_metrics.json",
-            "models/stage2_regression/dt_metrics.json",
             "dataset/processed/meta_test.csv",
             "models/saved_models/stage2_logreg_final.pkl",
-            "models/saved_models/stage2_knn_final.pkl",
             "models/saved_models/stage2_dt_final.pkl",
+            "models/saved_models/stage2_knn_final.pkl",
             "models/saved_models/stage3_meta_classifier.pkl",
         ],
         "outputs": [
             "models/evaluation/results/model_comparison_table.csv",
+            "models/evaluation/results/multiseed_evaluation_table.csv",
+            "docs/stage5_evaluation_report.md",
         ],
     },
 ]
@@ -266,7 +189,7 @@ def save_log(log):
         json.dump(log, f, indent=2, ensure_ascii=False)
 
 
-def run_step(step_def, log):
+def run_step(step_def, log, refresh_features=False):
     """Execute one pipeline step, capture everything, append to log."""
     step_num = step_def["step"]
     script = step_def["script"]
@@ -281,26 +204,36 @@ def run_step(step_def, log):
     # Snapshot inputs BEFORE running
     inputs_before = [file_info(p) for p in step_def["inputs"]]
 
-    # Run the script (force utf-8 so child scripts don't crash on Windows cp1252)
+    # Run the script and stream output live
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     t0 = time.time()
-    result = subprocess.run(
-        [PYTHON, str(script_path)],
+    
+    cmd = [PYTHON, str(script_path)]
+    if refresh_features and step_num == 1:
+        cmd.append("--refresh-features")
+        
+    process = subprocess.Popen(
+        cmd,
         cwd=str(ROOT),
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
         encoding="utf-8",
         errors="replace",
         env=env,
     )
-    duration = round(time.time() - t0, 2)
-    success = result.returncode == 0
-
+    
+    output_lines = []
     # Print console output live (ascii-safe for Windows terminals)
-    if result.stdout:
-        print(result.stdout.encode("ascii", errors="replace").decode("ascii"))
-    if result.stderr and not success:
-        print("[STDERR]", result.stderr.encode("ascii", errors="replace").decode("ascii"))
+    for line in process.stdout:
+        output_lines.append(line)
+        print(line.encode("ascii", errors="replace").decode("ascii"), end="")
+        
+    process.wait()
+    full_output = "".join(output_lines)
+    
+    duration = round(time.time() - t0, 2)
+    success = process.returncode == 0
 
     # Snapshot outputs AFTER running
     outputs_after = [file_info(p) for p in step_def["outputs"]]
@@ -337,13 +270,13 @@ def run_step(step_def, log):
         "description": step_def["description"],
         "why": step_def["why"],
         "status": "SUCCESS" if success else "FAILED",
-        "return_code": result.returncode,
+        "return_code": process.returncode,
         "duration_seconds": duration,
         "started_at": datetime.now().isoformat(),
         "inputs": inputs_before,
         "outputs": outputs_after,
-        "console_output": result.stdout.strip() if result.stdout else "",
-        "stderr": result.stderr.strip() if result.stderr else "",
+        "console_output": full_output.strip() if full_output else "",
+        "stderr": "",
     }
     if metrics:
         entry["metrics"] = metrics
@@ -356,7 +289,7 @@ def run_step(step_def, log):
     if success:
         print(f"  [OK] Step {step_num} completed in {duration:.1f}s")
     else:
-        print(f"  [FAILED] Step {step_num} failed with exit code {result.returncode}")
+        print(f"  [FAILED] Step {step_num} failed with exit code {process.returncode}")
         print(f"  Check pipeline_log.json for details.")
 
     return success
@@ -376,6 +309,10 @@ def main():
     parser.add_argument(
         "--to", dest="end_step", type=int, default=9,
         help="Stop after this step number (default: 9 = run all)"
+    )
+    parser.add_argument(
+        "--refresh-features", action="store_true",
+        help="Force re-run of Stage 1 feature ablation (ignore cache)"
     )
     args = parser.parse_args()
 
@@ -407,7 +344,7 @@ def main():
         if step_def["step"] > args.end_step:
             break
 
-        success = run_step(step_def, log)
+        success = run_step(step_def, log, refresh_features=args.refresh_features)
         if not success:
             failed_at = step_def["step"]
             break

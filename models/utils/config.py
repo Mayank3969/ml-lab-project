@@ -20,10 +20,8 @@ SEED = 42
 TARGET = "casualty_severity"
 STAGE1_TARGET = "number_of_casualties"
 
-# Stage 1 features (collision-level, environmental/road)
-STAGE1_NUM = ["speed_limit"]
-STAGE1_CAT = ["road_type", "junction_detail", "light_conditions", "weather_conditions"]
-STAGE1_FEATURES = STAGE1_NUM + STAGE1_CAT
+# Stage 1 dynamically selected features path
+SELECTED_FEATURES_PATH = PROCESSED / "selected_features.json"
 
 # Classification
 CLASS_NAMES = ["Fatal", "Serious", "Slight"]
