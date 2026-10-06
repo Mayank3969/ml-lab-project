@@ -1,5 +1,11 @@
 # Pipeline Reference Guide
 
+> **Historical reference:** this document describes the previous risk-score and
+> shared-feature pipeline. The active implementation is documented in `README.md`
+> and `action plan.md`; active stages are `build_dataset.py`, the three tuning
+> notebooks, `train_risk_models.py`, `train_base_models.py`,
+> `train_meta_ensemble.py`, and `evaluate_pipeline.py`.
+
 > **What each file does, what data it reads, what it outputs, and the exact execution order.**
 
 ---

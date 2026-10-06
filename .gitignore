@@ -7,6 +7,12 @@ __pycache__/
 # Saved models (regeneratable - don't commit)
 models/saved_models/*.pkl
 
+# Hyperparameter outputs (the notebooks and folder markers are committed)
+hyper parameter/results/*
+!hyper parameter/results/.gitkeep
+hyper parameter/best/*
+!hyper parameter/best/.gitkeep
+
 # AI learning toolkit (local reference, not project code)
 AI-Learning-Toolkit/
 
