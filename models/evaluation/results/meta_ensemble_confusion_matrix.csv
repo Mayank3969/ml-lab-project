@@ -1,0 +1,4 @@
+,Pred_Fatal,Pred_Serious,Pred_Slight
+True_Fatal,219,65,24
+True_Serious,1526,2376,1650
+True_Slight,2336,5509,11873

@@ -71,10 +71,10 @@ def train_one(model_name: str, train: pd.DataFrame, test: pd.DataFrame) -> dict:
         "model": model_name,
         "params": (LINEAR_REGRESSION_PARAMS if model_name == "linear_regression" else DECISION_TREE_REGRESSOR_PARAMS),
         "oof_r2": float(r2_score(y, oof)),
-        "oof_rmse": float(mean_squared_error(y, oof, squared=False)),
+        "oof_rmse": float(np.sqrt(mean_squared_error(y, oof))),
         "oof_mae": float(mean_absolute_error(y, oof)),
         "test_r2": float(r2_score(y_test, test_prediction)),
-        "test_rmse": float(mean_squared_error(y_test, test_prediction, squared=False)),
+        "test_rmse": float(np.sqrt(mean_squared_error(y_test, test_prediction))),
         "test_mae": float(mean_absolute_error(y_test, test_prediction)),
     }
     risk_column = f"risk_score_{model_name}"
