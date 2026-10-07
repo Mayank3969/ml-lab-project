@@ -7,6 +7,11 @@ __pycache__/
 # Saved models (regeneratable - don't commit)
 models/saved_models/*.pkl
 
+# Offline graph images (regeneratable; Streamlit reads them when generated)
+docs/graphs/*.png
+docs/graphs/graph_manifest.json
+!docs/graphs/.gitkeep
+
 # Hyperparameter outputs (the notebooks and folder markers are committed)
 hyper parameter/results/*
 !hyper parameter/results/.gitkeep

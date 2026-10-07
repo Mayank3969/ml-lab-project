@@ -23,6 +23,7 @@ def generated_files() -> list[Path]:
         ROOT / "models" / "evaluation" / "results": ["*"],
         ROOT / "hyper parameter" / "results": ["*"],
         ROOT / "hyper parameter" / "best": ["*"],
+        ROOT / "docs" / "graphs": ["*.png", "graph_manifest.json"],
     }.items():
         for pattern in patterns:
             matches = directory.rglob("*") if pattern == "*" else directory.glob(pattern)

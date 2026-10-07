@@ -14,11 +14,41 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(ROOT / "models"))
 from inference import MODEL_FEATURES, predict_pipeline, required_columns
-from utils.config import REGRESSION_FEATURES
+from utils.config import REGRESSION_MODEL_FEATURES
 
 TRAIN_PATH = ROOT / "dataset" / "processed" / "merged_train.csv"
+GRAPH_DIR = ROOT / "docs" / "graphs"
 LABELS = {1: "Fatal", 2: "Serious", 3: "Slight"}
 NUMERIC = {"age_of_casualty", "age_of_driver", "engine_capacity_cc", "number_of_vehicles", "speed_limit"}
+
+GRAPH_SECTIONS = {
+    "data": "Base and merged data",
+    "derived": "Processed and OOF diagnostics",
+    "model": "Final model diagnostics",
+}
+GRAPH_FALLBACK = [
+    ("data", "class_distribution.png", "Class distribution"),
+    ("data", "missing_values_by_table.png", "Missing values by source table"),
+    ("data", "severity_by_casualty_features.png", "Severity by casualty features"),
+    ("data", "severity_by_collision_conditions.png", "Severity by collision conditions"),
+    ("data", "severity_by_vehicle_impact.png", "Severity by vehicle and impact features"),
+    ("data", "numeric_features_by_severity.png", "Numeric features by severity"),
+    ("data", "collision_group_size_by_severity.png", "Collision group size by severity"),
+    ("derived", "train_test_class_balance.png", "Train/test class balance"),
+    ("derived", "oof_fold_class_balance.png", "OOF fold class balance"),
+    ("derived", "model_feature_contracts.png", "Model feature contracts"),
+    ("derived", "risk_scores_by_severity.png", "Risk scores by severity"),
+    ("derived", "oof_predicted_vs_actual_distribution.png", "OOF predicted versus actual classes"),
+    ("derived", "oof_fold_metrics.png", "OOF fold metrics"),
+    ("derived", "oof_confusion_matrices.png", "OOF confusion matrices"),
+    ("derived", "probability_calibration.png", "OOF probability calibration"),
+    ("model", "model_metric_comparison.png", "Model metric comparison"),
+    ("model", "per_class_metrics.png", "Per-class test metrics"),
+    ("model", "test_confusion_matrices.png", "Test confusion matrices"),
+    ("model", "precision_recall_curves.png", "Test precision-recall curves"),
+    ("model", "regressor_diagnostics.png", "Risk regressor diagnostics"),
+    ("model", "meta_feature_coefficients.png", "Meta-model feature coefficients"),
+]
 
 
 @st.cache_data
@@ -107,11 +137,63 @@ def render_csv_testing() -> None:
             st.error(str(error))
 
 
+@st.cache_data
+def load_graph_manifest() -> list[dict[str, str]]:
+    """Load the offline graph catalog without creating any plots."""
+    manifest_path = GRAPH_DIR / "graph_manifest.json"
+    if manifest_path.exists():
+        import json
+
+        return json.loads(manifest_path.read_text(encoding="utf-8"))
+    return [
+        {"section": section, "filename": filename, "title": title}
+        for section, filename, title in GRAPH_FALLBACK
+    ]
+
+
+def render_saved_graphs() -> None:
+    """Display pre-rendered graph files from docs/graphs."""
+    st.header("Data and model graphs")
+    st.caption(
+        "These images are generated manually by "
+        "models/stage1_merge/create_graphs.py. Streamlit only reads the saved files."
+    )
+    if not GRAPH_DIR.exists():
+        st.info("No saved graphs found. Run `python models/stage1_merge/create_graphs.py` first.")
+        return
+
+    manifest = load_graph_manifest()
+    available = [entry for entry in manifest if (GRAPH_DIR / entry["filename"]).exists()]
+    if not available:
+        st.info("No saved graph images found. Run the manual graph-generation command first.")
+        return
+
+    section_options = ["All sections"] + list(GRAPH_SECTIONS.values())
+    selected_section = st.selectbox("Graph section", section_options)
+    selected_key = next(
+        (key for key, label in GRAPH_SECTIONS.items() if label == selected_section),
+        None,
+    )
+    if selected_key is not None:
+        available = [entry for entry in available if entry["section"] == selected_key]
+
+    for section_key, section_title in GRAPH_SECTIONS.items():
+        entries = [entry for entry in available if entry["section"] == section_key]
+        if not entries:
+            continue
+        st.subheader(section_title)
+        for start in range(0, len(entries), 2):
+            columns = st.columns(2)
+            for column, entry in zip(columns, entries[start:start + 2]):
+                with column:
+                    st.image(str(GRAPH_DIR / entry["filename"]), caption=entry["title"], use_container_width=True)
+
+
 st.set_page_config(page_title="Collision Severity", page_icon="🚗", layout="wide")
 st.title("Collision Severity Prediction")
 st.caption("A grouped, leakage-aware model for Fatal, Serious, and Slight casualty severity.")
 
-models = st.sidebar.radio("Page", ["Home", "Workflow", "Model metrics", "Single prediction", "CSV testing"])
+models = st.sidebar.radio("Page", ["Home", "Workflow", "Model metrics", "Graphs", "Single prediction", "CSV testing"])
 artifacts = None
 try:
     from inference import get_models
@@ -185,7 +267,8 @@ flowchart LR
         st.subheader(title)
         st.write(description)
     st.subheader("Model-specific inputs")
-    st.write(f"**Risk regressors (Stage 1):** {', '.join(REGRESSION_FEATURES)}")
+    for name, columns in REGRESSION_MODEL_FEATURES.items():
+        st.write(f"**{name}:** {', '.join(columns)}")
     for name, columns in MODEL_FEATURES.items():
         st.write(f"**{name}:** {', '.join(columns)}")
 
@@ -218,6 +301,9 @@ elif models == "Model metrics":
             if matrix_path.exists():
                 st.dataframe(pd.read_csv(matrix_path, index_col=0), use_container_width=True)
             st.json(reports[selected])
+
+elif models == "Graphs":
+    render_saved_graphs()
 
 elif models == "Single prediction":
     if not TRAIN_PATH.exists():

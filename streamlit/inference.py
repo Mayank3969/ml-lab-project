@@ -17,7 +17,6 @@ from utils.config import (
     CLASS_LABELS,
     META_FEATURES,
     MODEL_FEATURES,
-    REGRESSION_FEATURES,
     REGRESSION_MODEL_FEATURES,
 )
 

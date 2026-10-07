@@ -102,10 +102,25 @@ Start the dashboard with:
 streamlit run streamlit\app.py
 ```
 
-It contains Home, Workflow, Model metrics, Single prediction, and CSV testing.
+It contains Home, Workflow, Model metrics, Graphs, Single prediction, and CSV testing.
 The Workflow page includes the complete data-flow chart. The Model metrics page
 shows the base-model and ensemble comparisons, classification reports, and
 confusion matrices.
+
+### Offline graphs
+
+The dashboard's **Graphs** page reads static images from `docs/graphs`; it does
+not generate plots while serving the app. After the processed data and model
+artifacts have been created, generate the complete graph set manually:
+
+```powershell
+python models\stage1_merge\create_graphs.py
+```
+
+The script writes data, processed/OOF, calibration, precision-recall, model
+comparison, confusion-matrix, regressor-diagnostic, and meta-coefficient plots
+to `docs/graphs`. Use `--scope data`, `--scope derived`, or `--scope model` to
+generate only one group.
 
 ## Reset generated files
 
