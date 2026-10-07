@@ -28,6 +28,7 @@ from utils.config import (
     LOGISTIC_FEATURES,
     SEED,
     REGRESSION_FEATURES,
+    REGRESSION_MODEL_FEATURES,
     REGRESSION_TARGET,
     REGRESSION_TEST_PATH,
     REGRESSION_TRAIN_PATH,
@@ -294,6 +295,7 @@ def save_outputs(
             "decision_tree": DECISION_TREE_FEATURES,
         },
         "regression_features": REGRESSION_FEATURES,
+        "regression_model_features": REGRESSION_MODEL_FEATURES,
         "regression_target": REGRESSION_TARGET,
         "all_safe_columns": [
             column for column in frame.columns if column not in {"collision_index", TARGET}

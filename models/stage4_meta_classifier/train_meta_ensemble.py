@@ -27,6 +27,12 @@ sys.path.insert(0, str(ROOT / "models"))
 from utils.config import META_FEATURES, MODELS_DIR, PROCESSED, RESULTS_DIR, TARGET
 from utils.manual_parameters import META_ENSEMBLE_PARAMS, META_RISK_FEATURE
 
+def clean_params(params: dict, prefix: str = "classifier__") -> dict:
+    """Strip prefix. Cast class_weight keys to int."""
+    out = {k.removeprefix(prefix): v for k, v in params.items()}
+    if isinstance(out.get("class_weight"), dict):
+        out["class_weight"] = {int(k): v for k, v in out["class_weight"].items()}
+    return out
 
 def metrics(y_true: pd.Series, prediction: pd.Series) -> dict:
     """Return all metrics used in the final comparison."""
@@ -54,7 +60,7 @@ def main() -> None:
     features = META_FEATURES + [META_RISK_FEATURE]
     model = Pipeline([
         ("scale", StandardScaler()),
-        ("classifier", LogisticRegression(random_state=19, **META_ENSEMBLE_PARAMS)),
+        ("classifier", LogisticRegression(random_state=19, max_iter=2000, **clean_params(META_ENSEMBLE_PARAMS))),
     ])
     model.fit(train[features], train[TARGET].astype(int))
     prediction = model.predict(test[features])
@@ -62,7 +68,7 @@ def main() -> None:
         "model": "meta_ensemble_3",
         "risk_feature": META_RISK_FEATURE,
         "features": features,
-        "params": META_ENSEMBLE_PARAMS,
+        "params": clean_params(META_ENSEMBLE_PARAMS),
         **metrics(test[TARGET].astype(int), prediction),
         "classification_report": classification_report(
             test[TARGET], prediction, labels=[1, 2, 3], output_dict=True, zero_division=0

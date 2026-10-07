@@ -23,7 +23,7 @@ from utils.config import (
     HYPERPARAMETER_RESULTS,
     MODELS_DIR,
     PROCESSED,
-    REGRESSION_FEATURES,
+    REGRESSION_MODEL_FEATURES,
     REGRESSION_TARGET,
     REGRESSION_TEST_PATH,
     REGRESSION_TRAIN_PATH,
@@ -35,26 +35,28 @@ from utils.preprocessing import build_regression_preprocessor
 RESULTS = HYPERPARAMETER_RESULTS / "manual_pipeline_regression"
 RESULTS.mkdir(parents=True, exist_ok=True)
 
-
 def build_model(model_name: str) -> Pipeline:
     """Create one regression pipeline from manual_parameters.py."""
     if model_name == "linear_regression":
-        estimator = LinearRegression(**LINEAR_REGRESSION_PARAMS)
+        params = {k.removeprefix("regressor__"): v for k, v in LINEAR_REGRESSION_PARAMS.items()}
+        estimator = LinearRegression(**params)
     elif model_name == "decision_tree_regressor":
-        estimator = DecisionTreeRegressor(random_state=SEED, **DECISION_TREE_REGRESSOR_PARAMS)
+        params = {k.removeprefix("regressor__"): v for k, v in DECISION_TREE_REGRESSOR_PARAMS.items()}
+        estimator = DecisionTreeRegressor(random_state=SEED, **params)
     else:
         raise KeyError(model_name)
     return Pipeline([
-        ("preprocessor", build_regression_preprocessor()),
+        ("preprocessor", build_regression_preprocessor(REGRESSION_MODEL_FEATURES[model_name])),
         ("regressor", estimator),
     ])
 
 
 def train_one(model_name: str, train: pd.DataFrame, test: pd.DataFrame) -> dict:
     """Fit one regressor, generate collision-level OOF scores, and save outputs."""
-    X = train[REGRESSION_FEATURES]
+    features = REGRESSION_MODEL_FEATURES[model_name]
+    X = train[features]
     y = train[REGRESSION_TARGET].astype(float)
-    X_test = test[REGRESSION_FEATURES]
+    X_test = test[features]
     y_test = test[REGRESSION_TARGET].astype(float)
     cv = KFold(n_splits=5, shuffle=True, random_state=SEED)
     base_model = build_model(model_name)
@@ -69,6 +71,7 @@ def train_one(model_name: str, train: pd.DataFrame, test: pd.DataFrame) -> dict:
     test_prediction = final_model.predict(X_test)
     result = {
         "model": model_name,
+        "features": features,
         "params": (LINEAR_REGRESSION_PARAMS if model_name == "linear_regression" else DECISION_TREE_REGRESSOR_PARAMS),
         "oof_r2": float(r2_score(y, oof)),
         "oof_rmse": float(np.sqrt(mean_squared_error(y, oof))),

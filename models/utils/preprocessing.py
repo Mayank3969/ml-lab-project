@@ -74,13 +74,14 @@ def build_preprocessor(model_name: str) -> ColumnTransformer:
     )
 
 
-def build_regression_preprocessor() -> ColumnTransformer:
+def build_regression_preprocessor(features: list[str] | None = None) -> ColumnTransformer:
     """Build the collision-level encoder used by both risk regressors."""
     from utils.config import REGRESSION_FEATURES
 
+    columns = REGRESSION_FEATURES if features is None else list(features)
     numeric_names = {"number_of_vehicles", "speed_limit"}
-    numeric = [column for column in REGRESSION_FEATURES if column in numeric_names]
-    categorical = [column for column in REGRESSION_FEATURES if column not in numeric_names]
+    numeric = [column for column in columns if column in numeric_names]
+    categorical = [column for column in columns if column not in numeric_names]
     return ColumnTransformer([
         ("categorical", OneHotEncoder(handle_unknown="ignore", sparse_output=False), categorical),
         ("numeric", StandardScaler(), numeric),

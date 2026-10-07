@@ -43,18 +43,26 @@ ARTIFACT_NAMES = {
 }
 
 
+def clean_params(params: dict, prefix: str = "classifier__") -> dict:
+    """Strip prefix. Cast class_weight keys to int."""
+    out = {k.removeprefix(prefix): v for k, v in params.items()}
+    if isinstance(out.get("class_weight"), dict):
+        out["class_weight"] = {int(k): v for k, v in out["class_weight"].items()}
+    return out
+
+
 def build_model(model_name: str) -> Pipeline:
     """Create one classifier with its model-specific preprocessing."""
     if model_name == "logistic_regression":
-        estimator = LogisticRegression(random_state=19, **LOGISTIC_REGRESSION_PARAMS)
+        estimator = LogisticRegression(random_state=19, max_iter=2000, **clean_params(LOGISTIC_REGRESSION_PARAMS))
     elif model_name == "knn":
-        estimator = KNeighborsClassifier(**KNN_PARAMS)
+        estimator = KNeighborsClassifier(**clean_params(KNN_PARAMS))
     elif model_name == "decision_tree":
-        estimator = DecisionTreeClassifier(random_state=19, **DECISION_TREE_PARAMS)
+        estimator = DecisionTreeClassifier(random_state=19, **clean_params(DECISION_TREE_PARAMS))
     else:
         raise KeyError(model_name)
     steps = [("preprocessor", build_preprocessor(model_name))]
-    if model_name == "knn":
+    if model_name in ("knn", "logistic_regression"):
         steps.append(("scale", StandardScaler(with_mean=False)))
     steps.append(("classifier", estimator))
     return Pipeline(steps)

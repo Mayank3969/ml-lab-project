@@ -1,5 +1,6 @@
 """Small, shared configuration for the active pipeline."""
 
+import json
 from pathlib import Path
 
 
@@ -15,6 +16,26 @@ HYPERPARAMETER_BEST = HYPERPARAMETER_DIR / "best"
 for directory in [PROCESSED, MODELS_DIR, RESULTS_DIR, HYPERPARAMETER_RESULTS, HYPERPARAMETER_BEST]:
     directory.mkdir(parents=True, exist_ok=True)
 
+
+def _load_best_features(model_name: str) -> list[str]:
+    """Load and validate the feature contract selected for one model."""
+    path = HYPERPARAMETER_BEST / f"{model_name}_best_params.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as error:
+        raise FileNotFoundError(
+            f"Missing best-parameter file for {model_name}: {path}"
+        ) from error
+
+    if payload.get("model") != model_name:
+        raise ValueError(f"{path} declares model {payload.get('model')!r}, expected {model_name!r}")
+    features = payload.get("features")
+    if not isinstance(features, list) or not features or not all(isinstance(feature, str) for feature in features):
+        raise ValueError(f"{path} must contain a non-empty string list named 'features'")
+    if len(features) != len(set(features)):
+        raise ValueError(f"{path} contains duplicate feature names")
+    return features
+
 SEED = 19
 TARGET = "casualty_severity"
 CLASS_LABELS = [1, 2, 3]
@@ -22,50 +43,41 @@ CLASS_NAMES = ["Fatal", "Serious", "Slight"]
 SPLIT_FOLDS = 5
 FATAL_TOLERANCE = 0.001
 REGRESSION_TARGET = "number_of_casualties"
-REGRESSION_FEATURES = [
-    "number_of_vehicles", "day_of_week", "first_road_class", "road_type",
-    "speed_limit", "junction_detail", "junction_control", "light_conditions",
-    "weather_conditions", "road_surface_conditions", "urban_or_rural_area",
-    "special_conditions_at_site", "carriageway_hazards",
-]
+
+# The JSON files produced by the tuning notebooks are the source of truth for
+# raw model inputs.  Keeping these lists here makes every training/inference
+# module import the same ordered contract instead of silently drifting from the
+# selected feature set.
+BEST_FEATURES = {
+    model_name: _load_best_features(model_name)
+    for model_name in [
+        "linear_regression",
+        "decision_tree_regressor",
+        "logistic_regression",
+        "knn",
+        "decision_tree",
+    ]
+}
+
+REGRESSION_MODEL_FEATURES = {
+    "linear_regression": BEST_FEATURES["linear_regression"],
+    "decision_tree_regressor": BEST_FEATURES["decision_tree_regressor"],
+}
+# The merge stage keeps the union because the two regressors may legitimately
+# have different selected inputs; each regressor later receives only its own
+# list from REGRESSION_MODEL_FEATURES.
+REGRESSION_FEATURES = list(dict.fromkeys(
+    feature
+    for features in REGRESSION_MODEL_FEATURES.values()
+    for feature in features
+))
 
 # These fields are known immediately after a collision.  Confirmed severity,
 # casualty totals, and police attendance are intentionally excluded from the
 # early-after-collision contract because they can be outcome proxies.
-LOGISTIC_FEATURES = [
-    "casualty_class", "sex_of_casualty", "age_of_casualty", "casualty_type",
-    "casualty_imd_decile", "casualty_distance_banding", "number_of_vehicles",
-    "day_of_week", "first_road_class", "road_type", "speed_limit",
-    "junction_detail", "junction_control", "pedestrian_crossing",
-    "light_conditions", "weather_conditions", "road_surface_conditions",
-    "urban_or_rural_area", "vehicle_type", "vehicle_manoeuvre",
-    "vehicle_direction_from", "vehicle_direction_to", "junction_location",
-    "skidding_and_overturning", "hit_object_in_carriageway",
-    "vehicle_leaving_carriageway", "hit_object_off_carriageway",
-    "first_point_of_impact", "sex_of_driver", "age_of_driver",
-    "engine_capacity_cc", "propulsion_code", "journey_purpose_of_driver",
-]
-
-KNN_FEATURES = [
-    "casualty_class", "sex_of_casualty", "age_of_casualty", "casualty_type",
-    "number_of_vehicles", "first_road_class", "road_type", "speed_limit",
-    "light_conditions", "weather_conditions", "urban_or_rural_area",
-    "vehicle_type", "vehicle_manoeuvre", "vehicle_leaving_carriageway",
-    "first_point_of_impact", "skidding_and_overturning",
-    "hit_object_in_carriageway", "hit_object_off_carriageway",
-    "age_of_driver", "engine_capacity_cc",
-]
-
-DECISION_TREE_FEATURES = [
-    "casualty_class", "sex_of_casualty", "age_of_casualty", "casualty_type",
-    "number_of_vehicles", "day_of_week", "first_road_class", "road_type",
-    "speed_limit", "junction_detail", "junction_control", "light_conditions",
-    "weather_conditions", "road_surface_conditions", "urban_or_rural_area",
-    "vehicle_type", "vehicle_manoeuvre", "vehicle_direction_from",
-    "vehicle_direction_to", "vehicle_leaving_carriageway",
-    "first_point_of_impact", "hit_object_off_carriageway", "age_of_driver",
-    "engine_capacity_cc", "journey_purpose_of_driver",
-]
+LOGISTIC_FEATURES = BEST_FEATURES["logistic_regression"]
+KNN_FEATURES = BEST_FEATURES["knn"]
+DECISION_TREE_FEATURES = BEST_FEATURES["decision_tree"]
 
 MODEL_FEATURES = {
     "logistic_regression": LOGISTIC_FEATURES,

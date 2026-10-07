@@ -13,7 +13,13 @@ MODELS = ROOT / "models" / "saved_models"
 import sys
 
 sys.path.insert(0, str(ROOT / "models"))
-from utils.config import CLASS_LABELS, META_FEATURES, MODEL_FEATURES, REGRESSION_FEATURES, RISK_FEATURES
+from utils.config import (
+    CLASS_LABELS,
+    META_FEATURES,
+    MODEL_FEATURES,
+    REGRESSION_FEATURES,
+    REGRESSION_MODEL_FEATURES,
+)
 
 
 class ModelArtifacts:
@@ -50,6 +56,11 @@ class ModelArtifacts:
                 trained_columns = list(getattr(model, "feature_names_in_", MODEL_FEATURES[name]))
                 if trained_columns != MODEL_FEATURES[name]:
                     raise ValueError(f"Saved {name} columns differ from the active feature contract")
+            for risk_name, model in self.regressors.items():
+                model_name = risk_name.removeprefix("risk_score_")
+                trained_columns = list(getattr(model, "feature_names_in_", REGRESSION_MODEL_FEATURES[model_name]))
+                if trained_columns != REGRESSION_MODEL_FEATURES[model_name]:
+                    raise ValueError(f"Saved {risk_name} columns differ from the active feature contract")
             self.loaded = True
             self.error = None
         except Exception as error:  # pragma: no cover - displayed by the app
@@ -72,7 +83,11 @@ def get_models() -> ModelArtifacts:
 def required_columns() -> list[str]:
     """Return the union of all raw columns required by the base models."""
     all_columns = list(column for columns in MODEL_FEATURES.values() for column in columns)
-    all_columns.extend(REGRESSION_FEATURES)
+    all_columns.extend(
+        feature
+        for features in REGRESSION_MODEL_FEATURES.values()
+        for feature in features
+    )
     return list(dict.fromkeys(all_columns))
 
 
@@ -112,7 +127,8 @@ def predict_pipeline(input_df: pd.DataFrame) -> dict:
         ):
             meta_frame[column] = values
     for risk_name, model in artifacts.regressors.items():
-        meta_frame[risk_name] = model.predict(input_df[REGRESSION_FEATURES])
+        model_name = risk_name.removeprefix("risk_score_")
+        meta_frame[risk_name] = model.predict(input_df[REGRESSION_MODEL_FEATURES[model_name]])
     final_predictions = artifacts.meta.predict(meta_frame[artifacts.meta_features])
     final_probabilities = artifacts.meta.predict_proba(meta_frame[artifacts.meta_features])
     return {
