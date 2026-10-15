@@ -1,140 +1,233 @@
 # Collision Severity Prediction
 
-This project predicts UK STATS19 casualty severity as Fatal, Serious, or Slight
-using a leakage-aware, collision-grouped pipeline.
+An end-to-end machine-learning mini project for predicting road-collision
+casualty severity from UK STATS19 collision, vehicle, and casualty data.
 
-## Normal faculty workflow
+The system predicts one of three outcomes:
 
-1. Run the six tuning notebooks in `hyper parameter/` overnight.
-2. Copy selected values into `models/utils/manual_parameters.py`.
-3. Build stages 1–3 and create OOF inputs:
+| Code | Severity |
+| ---: | --- |
+| 1 | Fatal |
+| 2 | Serious |
+| 3 | Slight |
 
-   ```powershell
-   python pipeline.py --clean --to 3
-   ```
+The project is designed around a practical question: **can casualty severity
+be estimated using information available soon after a collision, without
+leaking the outcome into the features?**
 
-4. Run `hyper parameter/meta_ensemble_tuning.ipynb`.
-5. Copy the selected final ensemble parameters and risk source into
-   `manual_parameters.py`.
-6. Finish the final model and evaluation:
+## Highlights
 
-   ```powershell
-   python pipeline.py --from 4
-   ```
+- Joins collision, vehicle, and casualty records using the collision identifier.
+- Keeps all casualties from the same collision in the same train or test split.
+- Removes outcome-proxy and target-leakage fields before modelling.
+- Uses model-specific feature contracts selected during hyperparameter tuning.
+- Produces out-of-fold predictions for a leakage-aware stacking model.
+- Provides a Streamlit dashboard for single-record and CSV predictions.
+- Reports accuracy, balanced accuracy, macro and weighted metrics, and
+  per-class recall.
 
-After all parameters are fixed, a complete fresh demonstration is:
+## Model architecture
+
+The final prediction is produced by a stacking pipeline:
+
+1. Two collision-level regressors estimate the number of casualties:
+   - **Linear Regression**
+   - **Decision Tree Regressor**
+2. Three casualty-severity classifiers estimate Fatal, Serious, and Slight
+   probabilities:
+   - **Logistic Regression**
+   - **K-Nearest Neighbours (KNN)**
+   - **Decision Tree Classifier**
+3. A final **Logistic Regression meta-classifier** combines the nine base-model
+   probabilities with the selected linear-regression risk score.
+
+The regressors are not additional severity predictions. They provide
+collision-level risk signals to the final severity classifier.
+
+## Project structure
+
+```text
+.
+├── dataset/
+│   ├── raw/                         # Source collision, vehicle, casualty CSVs
+│   └── processed/                   # Generated train/test and OOF data
+├── docs/                            # Pipeline documentation and diagrams
+├── hyper parameter/                # Tuning notebooks and selected contracts
+├── models/
+│   ├── stage1_merge/                # Join, clean, split, and graph generation
+│   ├── stage1_regression/           # Collision-level risk scores
+│   ├── stage3a_base_classifiers/   # Three severity base classifiers
+│   ├── stage4_meta_classifier/     # Final stacking classifier
+│   ├── evaluation/                 # Test-set comparison and reports
+│   └── utils/                      # Configuration and preprocessing
+├── streamlit/
+│   ├── app.py                       # Dashboard
+│   └── inference.py                 # Saved-model inference
+├── pipeline.py                      # End-to-end pipeline runner
+├── requirements.txt
+└── run_full_pipeline.bat            # Windows pipeline shortcut
+```
+
+Generated datasets, saved models, evaluation outputs, local environments, and
+temporary files are intentionally excluded from version control. They are
+created locally when the pipeline is run.
+
+## Requirements
+
+- Windows, macOS, or Linux
+- Python 3.10 or newer
+- The raw CSV files in `dataset/raw/`
+
+Install the dependencies from the project root:
+
+```powershell
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+On macOS or Linux, activate the environment with:
+
+```bash
+source venv/bin/activate
+```
+
+## Run the training pipeline
+
+The normal pipeline runs five stages:
+
+| Stage | Purpose |
+| ---: | --- |
+| 1 | Join and validate the raw tables, remove leakage, and create grouped train/test data |
+| 2 | Train the Linear Regression and Decision Tree Regressor risk models |
+| 3 | Train the Logistic Regression, KNN, and Decision Tree classifiers and create out-of-fold features |
+| 4 | Train the final Logistic Regression stacking model |
+| 5 | Evaluate the base classifiers and final ensemble on the locked test set |
+
+Run every stage from a clean state:
 
 ```powershell
 python pipeline.py --clean
 ```
 
-Windows shortcut:
-
-```text
-run_full_pipeline.bat
-```
-
-## Database reuse
-
-The prepared database is made by:
+The Windows shortcut runs the same complete demonstration:
 
 ```powershell
-python models\stage1_merge\build_dataset.py
+.\run_full_pipeline.bat
 ```
 
-If all required processed files already exist, this command reuses them and
-does not read/rebuild the raw database. To intentionally rebuild from raw CSVs:
+Run only a selected range when intermediate artifacts already exist:
 
 ```powershell
-python pipeline.py --clean --to 1
+python pipeline.py --to 3
+python pipeline.py --from 4
 ```
 
-Normal repeated runs should use:
+Stage 1 reuses existing processed data when it is complete. To force a fresh
+data build:
 
 ```powershell
-python pipeline.py
+python models\stage1_merge\build_dataset.py --force
 ```
 
-Stage 1 will only rebuild when a required processed file is missing or when
-`--clean` is supplied.
+The pipeline reads the selected feature contracts from
+`hyper parameter/best/` and the final parameter choices from
+`models/utils/manual_parameters.py`. If the best-parameter files are not
+available, run the tuning notebooks first.
 
-## Pipeline stages
+## Hyperparameter tuning
 
-1. Validated raw-table join and grouped split.
-2. Linear Regression and Decision Tree Regressor risk scores.
-3. Logistic Regression, KNN, and Decision Tree OOF probabilities.
-4. Final ensemble using nine probabilities plus the selected risk score.
-5. Evaluation for every base model and the ensemble.
+The notebooks in `hyper parameter/` are optional for using the already selected
+configuration, but they document how the active feature sets and parameters
+were selected:
 
-## Generated model artifacts
+1. `linear_regression_tuning.ipynb`
+2. `decision_tree_regressor_tuning.ipynb`
+3. `logistic_regression_tuning.ipynb`
+4. `knn_tuning.ipynb`
+5. `decision_tree_tuning.ipynb`
+6. `meta_ensemble_tuning.ipynb`
 
-```text
-models/saved_models/linear_regression_1.pkl
-models/saved_models/decision_tree_regressor_1.pkl
-models/saved_models/logistic_regression_2.pkl
-models/saved_models/knn_2.pkl
-models/saved_models/decision_tree_2.pkl
-models/saved_models/meta_ensemble_3.pkl
-```
+The final ensemble notebook should be run after the base-classifier stage has
+created out-of-fold features. The selected values are then recorded in
+`models/utils/manual_parameters.py`.
 
-## Results
+## Run the dashboard
 
-The final comparison is written to:
-
-```text
-models/evaluation/results/model_comparison.csv
-```
-
-It includes Accuracy, balanced accuracy, macro/weighted Precision, Recall, F1,
-and per-class recall. Base-model OOF versus locked-test results are written to:
-
-```text
-models/evaluation/results/base_model_metrics.csv
-```
-
-Regression stages also report R², RMSE, and MAE.
-
-## Streamlit
-
-Start the dashboard with:
+After the saved model artifacts have been generated:
 
 ```powershell
 streamlit run streamlit\app.py
 ```
 
-It contains Home, Workflow, Model metrics, Graphs, Single prediction, and CSV testing.
-The Workflow page includes the complete data-flow chart. The Model metrics page
-shows the base-model and ensemble comparisons, classification reports, and
-confusion matrices.
+The dashboard includes:
 
-### Offline graphs
+- Project overview and workflow explanation
+- Model metric comparison
+- Saved data and model graphs
+- Single-record severity prediction
+- CSV batch prediction
+- Fatal, Serious, and Slight probability outputs
+- Downloadable prediction results
 
-The dashboard's **Graphs** page reads static images from `docs/graphs`; it does
-not generate plots while serving the app. After the processed data and model
-artifacts have been created, generate the complete graph set manually:
+For CSV prediction, upload a file containing the raw feature columns required
+by the active model contracts. The target column and collision identifier are
+not required for prediction.
+
+## Evaluation outputs
+
+The evaluation stage writes generated files to
+`models/evaluation/results/`, including:
+
+- `model_comparison.csv`
+- `base_model_metrics.csv`
+- Classification reports
+- Confusion matrices
+- Final ensemble metrics
+
+The main comparison includes accuracy, balanced accuracy, macro and weighted
+precision, recall and F1, together with Fatal, Serious, and Slight recall.
+
+## Generate graphs
+
+Graphs are generated separately from model training:
 
 ```powershell
 python models\stage1_merge\create_graphs.py
 ```
 
-The script writes data, processed/OOF, calibration, precision-recall, model
-comparison, confusion-matrix, regressor-diagnostic, and meta-coefficient plots
-to `docs/graphs`. Use `--scope data`, `--scope derived`, or `--scope model` to
-generate only one group.
+The dashboard reads the saved images from `docs/graphs`; it does not create
+plots while serving the application.
 
-## Reset generated files
+## Reset generated artifacts
 
-Preview the reset:
+Preview the cleanup first:
 
 ```powershell
 python reset_generated.py --dry-run
 ```
 
-Delete generated data/models/results while preserving raw data and source:
+Delete generated datasets, models, and evaluation outputs:
 
 ```powershell
 python reset_generated.py --yes
 ```
 
-The files named `redundant_*` are old implementations retained temporarily for
-comparison. The full file/function guide is in `action plan.md`.
+Raw source data and project source code are preserved.
+
+## Data and modelling notes
+
+- `collision_id`/`accident_index` links the source tables.
+- The split is collision-grouped so records from one collision cannot appear in
+  both training and test data.
+- The target is `casualty_severity`.
+- Regression models use `number_of_casualties` as their collision-level target.
+- Class labels are kept in the fixed order Fatal, Serious, Slight throughout
+  training, evaluation, and inference.
+- All models are CPU-based scikit-learn estimators; a GPU is not required.
+
+## Disclaimer
+
+This project is intended for academic demonstration and exploratory analysis.
+Predictions should not be used as the sole basis for emergency response,
+insurance, legal, or safety-critical decisions.
