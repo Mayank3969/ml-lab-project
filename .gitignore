@@ -3,9 +3,27 @@ __pycache__/
 *.pyc
 *.pyo
 .ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Saved models (regeneratable - don't commit)
-models/saved_models/*.pkl
+# Local environments
+venv/
+.venv/
+env/
+
+# Copilot/agent and local analysis state
+.agent/
+.codeaudit/
+.vscode/
+
+# Generated datasets and model artifacts (regeneratable - don't commit)
+dataset/processed/*
+!dataset/processed/.gitkeep
+models/saved_models/*
+!models/saved_models/.gitkeep
+models/evaluation/results/*
+!models/evaluation/results/.gitkeep
 
 # Offline graph images (regeneratable; Streamlit reads them when generated)
 docs/graphs/*.png
@@ -18,6 +36,14 @@ hyper parameter/results/*
 hyper parameter/best/*
 !hyper parameter/best/.gitkeep
 
+# Local copies and temporary test artifacts
+Test/
+report-test.json
+docs/runtime-architecture.html
+docs/runtime-architecture.visual-check.html
+docs/runtime-architecture.visual-check.json
+docs/collision_severity_study_guide.md
+
 # AI learning toolkit (local reference, not project code)
 AI-Learning-Toolkit/
 
@@ -25,4 +51,7 @@ AI-Learning-Toolkit/
 .DS_Store
 desktop.ini
 
+# Local notes and generated reports
 skills.md
+action plan.md
+Collision_Severity_Mini_Project_Report.docx
